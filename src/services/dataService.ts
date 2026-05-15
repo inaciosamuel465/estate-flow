@@ -177,13 +177,17 @@ export const subscribeToConversations = (callback: (conversations: Conversation[
         }
     };
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    // Reduzido de 10s para 20s — em produção, usar SSE ou WebSockets
+    const interval = setInterval(fetchData, 20000);
     return () => clearInterval(interval);
 };
 
 export const markConversationAsRead = async (id: string): Promise<void> => {
-    // Mark conversation as read - update unread_count to 0
-    // Implementation can be added to neonService if conversations table supports it
+    try {
+        await neon.markConversationAsRead(id);
+    } catch (error) {
+        console.error("Erro ao marcar conversa como lida:", error);
+    }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

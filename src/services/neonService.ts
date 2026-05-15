@@ -499,6 +499,14 @@ export async function getMessages(conversationId: string): Promise<ChatMessage[]
     })) as unknown as ChatMessage[];
 }
 
+export async function markConversationAsRead(conversationId: string): Promise<void> {
+    try {
+        await sql`UPDATE conversations SET unread_count = 0 WHERE id = ${conversationId}`;
+    } catch (e) {
+        console.error('Error marking conversation as read:', e);
+    }
+}
+
 export async function saveMessage(conversationId: string, message: ChatMessage, conversationData?: Partial<Conversation>): Promise<void> {
     const timestamp = new Date().toISOString();
     
@@ -513,14 +521,17 @@ export async function saveMessage(conversationId: string, message: ChatMessage, 
             ON CONFLICT (id) DO UPDATE SET
                 last_message = EXCLUDED.last_message,
                 last_update = EXCLUDED.last_update,
-                unread_count = conversations.unread_count + EXCLUDED.unread_count
+                unread_count = CASE 
+                    WHEN EXCLUDED.unread_count > 0 THEN conversations.unread_count + EXCLUDED.unread_count
+                    ELSE conversations.unread_count
+                END
         `;
     }
 
     await sql`
         INSERT INTO messages (conversation_id, sender_id, text, timestamp, attachment)
         VALUES (${conversationId}, ${message.sender}, ${message.text}, ${timestamp}, 
-                ${message.attachment || null})
+                ${message.attachment ? JSON.stringify(message.attachment) : null})
     `;
     
     // Update last message in conversation if not already updated by upsert

@@ -547,6 +547,7 @@ const App: React.FC = () => {
             conversations={conversations}
             properties={properties}
             contracts={contracts}
+            currentUser={currentUser}
           />
         );
         case 'listing': return <NewListing onPublish={handleAddProperty} currentUser={currentUser} />;

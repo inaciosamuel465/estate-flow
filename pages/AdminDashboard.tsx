@@ -6,9 +6,10 @@ import type { AIInsight } from '../src/services/aiAnalyticsService';
 
 interface AdminDashboardProps {
   onNavigate: (view: string) => void;
-  conversations?: Conversation[]; // Nova prop para contar mensagens
+  conversations?: Conversation[];
   properties?: Property[];
   contracts?: Contract[];
+  currentUser?: { name?: string; avatar?: string; } | null;
 }
 
 // Tipo para os alertas
@@ -25,7 +26,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigate,
   conversations = [],
   properties = [],
-  contracts = []
+  contracts = [],
+  currentUser
 }) => {
   const [timeRange, setTimeRange] = useState<'30d' | '3m' | '1y'>('30d');
   const [isBoosting, setIsBoosting] = useState(false);
@@ -167,7 +169,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Seção de Cabeçalho */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div className="flex flex-col gap-1">
-              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">Bem-vindo, Alex</h1>
+              <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
+                Bem-vindo{currentUser?.name ? `, ${currentUser.name.split(' ')[0]}` : ''}! 👋
+              </h1>
               <p className="text-slate-600 text-base font-medium">Aqui está o pulso diário do mercado e insights da IA.</p>
             </div>
             <div className="flex items-center gap-3">
@@ -252,70 +256,75 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Grid de Estatísticas - Scrollable horizontal on mobile */}
           <div className="flex xl:grid xl:grid-cols-5 gap-4 overflow-x-auto pb-4 xl:pb-0 no-scrollbar">
-            {/* Card 1 */}
+            {/* Card 1 — Imóveis Ativos */}
             <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">home_work</span>
                 </div>
-                <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+2 novos</span>
+                <span className="flex items-center text-blue-600 text-xs font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full">{currentData.active} ativos</span>
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Imóveis Ativos</p>
-                <p className="text-slate-900 text-2xl font-bold mt-1 transition-all duration-500">{currentData.active}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.active}</p>
               </div>
             </div>
-            {/* Card 2 */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white border border-slate-200 shadow-sm hover:border-primary/50 transition-colors group">
+            {/* Card 2 — Visualizações */}
+            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
-                <div className="p-2 rounded-lg bg-violet-50 text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">visibility</span>
                 </div>
-                <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+12%</span>
+                {dbStats.viewsThisWeek > 0 && (
+                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{dbStats.viewsThisWeek} hoje</span>
+                )}
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Visualizações</p>
-                <p className="text-slate-900 text-2xl font-bold mt-1 transition-all duration-500">{currentData.views}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.views}</p>
               </div>
             </div>
-            {/* Card 3 */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white border border-slate-200 shadow-sm hover:border-primary/50 transition-colors group">
+            {/* Card 3 — Leads */}
+            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
-                <div className="p-2 rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">groups</span>
                 </div>
-                <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+45 quentes</span>
+                {dbStats.leadsThisWeek > 0 && (
+                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{dbStats.leadsThisWeek} semana</span>
+                )}
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Leads Gerados</p>
-                <p className="text-slate-900 text-2xl font-bold mt-1 transition-all duration-500">{currentData.leads}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.leads}</p>
               </div>
             </div>
-            {/* Card 4 */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white border border-slate-200 shadow-sm hover:border-primary/50 transition-colors group">
+            {/* Card 4 — Taxa Conversão */}
+            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
-                <div className="p-2 rounded-lg bg-rose-50 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">pie_chart</span>
                 </div>
-                <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+0.2%</span>
+                <span className="flex items-center text-slate-500 text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">calculado</span>
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Taxa Conversão</p>
-                <p className="text-slate-900 text-2xl font-bold mt-1 transition-all duration-500">{currentData.conversion}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.conversion}</p>
               </div>
             </div>
-            {/* Card 5 */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white border border-slate-200 shadow-sm hover:border-primary/50 transition-colors group">
+            {/* Card 5 — Ticket Médio */}
+            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
-                <div className="p-2 rounded-lg bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                <div className="p-2 rounded-lg bg-teal-50 dark:bg-teal-900/20 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">payments</span>
                 </div>
-                <span className="flex items-center text-slate-500 text-xs font-bold bg-slate-100 px-2 py-1 rounded-full">estável</span>
+                {totalRevenue > 0 && (
+                  <span className="flex items-center text-teal-500 text-xs font-bold bg-teal-500/10 px-2 py-1 rounded-full">ativo</span>
+                )}
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Ticket Médio</p>
-                <p className="text-slate-900 text-2xl font-bold mt-1 transition-all duration-500">{currentData.ticket}</p>
-
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.ticket}</p>
               </div>
             </div>
           </div>
@@ -518,7 +527,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Footer */}
           <div className="mt-auto pt-6 text-center text-xs text-slate-400 dark:text-slate-600">
-            © 2023 EstateAI Platform. Todos os direitos reservados.
+            © {new Date().getFullYear()} EstateFlow Suite. Todos os direitos reservados.
           </div>
         </main>
       </div>

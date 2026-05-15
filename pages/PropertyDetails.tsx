@@ -116,8 +116,17 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
     const [isExpanded, setIsExpanded] = useState(false);
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '' });
-    const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success'>('idle');
+    const [contactForm, setContactForm] = useState({ name: '', email: '', phone: '', message: '' });
+    const [formStatus, setFormStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+
+    // Calculadora de Financiamento
+    const [calcDownPayment, setCalcDownPayment] = useState(20);
+    const [calcMonths, setCalcMonths] = useState(360);
+    const [calcRate, setCalcRate] = useState(0.8); // % ao mês
+    const financedAmount = propertyData ? propertyData.price * (1 - calcDownPayment / 100) : 0;
+    const monthlyPayment = financedAmount > 0
+        ? (financedAmount * (calcRate / 100)) / (1 - Math.pow(1 + calcRate / 100, -calcMonths))
+        : 0;
 
     // Estado para o Modal de Negociação
     const [showNegotiationModal, setShowNegotiationModal] = useState(false);
@@ -187,24 +196,62 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
         e.preventDefault();
         setFormStatus('sending');
         try {
-            // Save lead to Neon database
+            // Calcular score de intenção baseado em dados do formulário
+            const messageScore = contactForm.message.length > 50 ? 20 : contactForm.message.length > 20 ? 10 : 0;
+            const phoneScore = contactForm.phone ? 20 : 0;
+            const baseScore = 60; // base para quem preencheu o formulário
+            const intentScore = Math.min(100, baseScore + messageScore + phoneScore);
+
+            // Salvar lead no banco
             await addLead({
-                propertyId: String(propertyId || propertyData.id),
-                propertyTitle: propertyData.title,
+                propertyId: String(propertyId || propertyData?.id),
+                propertyTitle: propertyData?.title,
                 name: contactForm.name,
                 email: contactForm.email,
                 phone: contactForm.phone,
-                message: `Solicitação de informações via página do imóvel`,
+                message: contactForm.message || `Solicitação de informações via página do imóvel`,
                 status: 'new',
-                score: 60,
+                score: intentScore,
                 source: isPublic ? 'website_public' : 'website_admin',
             });
+
+            // Disparar email de confirmação ao lead e notificação ao admin
+            const agencyEmail = propertyData?.agency?.email || '';
+            if (agencyEmail || contactForm.email) {
+                const emailPayload = {
+                    // Email para o admin/imobiliária
+                    to: agencyEmail,
+                    subject: `🏠 Novo Lead: ${propertyData?.title}`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                            <h2 style="color: #1e293b;">Novo Lead Recebido!</h2>
+                            <p style="color: #64748b;">Um cliente demonstrou interesse em <strong>${propertyData?.title}</strong>.</p>
+                            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                                <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Nome</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${contactForm.name}</td></tr>
+                                <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Email</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${contactForm.email}</td></tr>
+                                <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Telefone</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${contactForm.phone}</td></tr>
+                                <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Mensagem</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${contactForm.message || 'N/A'}</td></tr>
+                                <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Score de Intenção</td><td style="padding: 8px; border: 1px solid #e2e8f0; color: ${intentScore >= 80 ? '#dc2626' : '#d97706'};"><strong>${intentScore}/100</strong></td></tr>
+                            </table>
+                            <a href="${window.location.origin}/admin/ai-analytics" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver Lead no CRM</a>
+                        </div>
+                    `
+                };
+                fetch('/api/email/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(emailPayload)
+                }).catch(() => {}); // Não bloquear o fluxo se o email falhar
+            }
+
+            setFormStatus('success');
+            setTimeout(() => setFormStatus('idle'), 4000);
+            setContactForm({ name: '', email: '', phone: '', message: '' });
         } catch (e) {
             console.error('Lead save error:', e);
+            setFormStatus('error');
+            setTimeout(() => setFormStatus('idle'), 3000);
         }
-        setFormStatus('success');
-        setTimeout(() => setFormStatus('idle'), 3000);
-        setContactForm({ name: '', email: '', phone: '' });
     };
 
     // --- Handlers de Negociação ---
@@ -608,21 +655,44 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
                                 </div>
                             </div>
 
-                            <div id="contact-form" className="bg-white border border-slate-200 rounded-2xl p-6">
-                                <h4 className="font-bold text-slate-900 mb-4">Solicitar Informações</h4>
+                            <div id="contact-form" className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="material-symbols-outlined text-primary text-[20px]">contact_mail</span>
+                                    <h4 className="font-bold text-slate-900">Solicitar Informações</h4>
+                                </div>
+                                <p className="text-xs text-slate-400 mb-4">Resposta garantida em até 2 horas.
+                                </p>
                                 {formStatus === 'success' ? (
                                     <div className="flex flex-col items-center justify-center py-8 text-center animate-in fade-in">
-                                        <div className="size-12 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 mb-3">
-                                            <span className="material-symbols-outlined notranslate text-2xl">check</span>
+                                        <div className="size-14 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 mb-3">
+                                            <span className="material-symbols-outlined notranslate text-3xl">check_circle</span>
                                         </div>
-                                        <p className="text-slate-900 font-bold">Mensagem Enviada!</p>
-                                        <p className="text-sm text-slate-500">Nossa equipe entrará em contato em breve.</p>
+                                        <p className="text-slate-900 font-bold text-lg">Mensagem Enviada!</p>
+                                        <p className="text-sm text-slate-500 mt-1">Nossa equipe entrará em contato em breve.</p>
+                                        <button
+                                            onClick={handleWhatsApp}
+                                            className="mt-4 w-full py-2.5 bg-[#25D366] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-[#20bd5a] transition-all"
+                                        >
+                                            <span className="material-symbols-outlined notranslate text-[18px]">chat</span>
+                                            Falar no WhatsApp também
+                                        </button>
+                                    </div>
+                                ) : formStatus === 'error' ? (
+                                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                                        <div className="size-12 bg-rose-50 rounded-full flex items-center justify-center text-rose-500 mb-3">
+                                            <span className="material-symbols-outlined notranslate text-2xl">error_outline</span>
+                                        </div>
+                                        <p className="text-rose-600 font-bold">Erro ao enviar</p>
+                                        <p className="text-sm text-slate-500 mt-1">Tente novamente ou entre pelo WhatsApp.</p>
+                                        <button onClick={handleWhatsApp} className="mt-3 w-full py-2.5 bg-[#25D366] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2">
+                                            <span className="material-symbols-outlined notranslate text-[18px]">chat</span> WhatsApp
+                                        </button>
                                     </div>
                                 ) : (
                                     <form onSubmit={handleContactSubmit} className="flex flex-col gap-3">
                                         <input
                                             className="w-full h-11 px-4 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
-                                            placeholder="Seu Nome"
+                                            placeholder="Seu Nome *"
                                             type="text"
                                             required
                                             value={contactForm.name}
@@ -630,33 +700,103 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
                                         />
                                         <input
                                             className="w-full h-11 px-4 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
-                                            placeholder="Email"
-                                            type="email"
-                                            required
-                                            value={contactForm.email}
-                                            onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                                        />
-                                        <input
-                                            className="w-full h-11 px-4 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
-                                            placeholder="Telefone"
+                                            placeholder="WhatsApp / Telefone *"
                                             type="tel"
                                             required
                                             value={contactForm.phone}
                                             onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
                                         />
+                                        <input
+                                            className="w-full h-11 px-4 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
+                                            placeholder="Email"
+                                            type="email"
+                                            value={contactForm.email}
+                                            onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                                        />
+                                        <textarea
+                                            className="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all resize-none"
+                                            placeholder="Mensagem (opcional): Qual sua dúvida ou interesse?"
+                                            rows={3}
+                                            value={contactForm.message}
+                                            onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                                        />
                                         <button
-                                            className="mt-2 w-full h-10 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white font-bold text-sm transition-all flex items-center justify-center gap-2"
+                                            className="mt-1 w-full h-11 rounded-xl bg-primary hover:bg-blue-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
                                             type="submit"
                                             disabled={formStatus === 'sending'}
                                         >
                                             {formStatus === 'sending' ? (
-                                                <span className="size-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                                                <span className="size-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                                             ) : (
-                                                'Enviar Solicitação'
+                                                <>
+                                                    <span className="material-symbols-outlined notranslate text-[18px]">send</span>
+                                                    Quero Saber Mais
+                                                </>
                                             )}
+                                        </button>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <div className="h-px flex-1 bg-slate-100" />
+                                            <span className="text-xs text-slate-400 font-medium">ou</span>
+                                            <div className="h-px flex-1 bg-slate-100" />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleWhatsApp}
+                                            className="w-full py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                                        >
+                                            <span className="material-symbols-outlined notranslate text-[18px]">chat</span>
+                                            Conversar pelo WhatsApp
                                         </button>
                                     </form>
                                 )}
+                            </div>
+
+                            {/* Calculadora de Financiamento */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <span className="material-symbols-outlined text-emerald-600 text-[20px]">calculate</span>
+                                    <h4 className="font-bold text-slate-900">Simulador de Financiamento</h4>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                            <span>Entrada: <strong className="text-slate-800">{calcDownPayment}%</strong></span>
+                                            <span>R$ {(propertyData ? propertyData.price * calcDownPayment / 100 : 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
+                                        </div>
+                                        <input
+                                            type="range" min={10} max={80} step={5}
+                                            value={calcDownPayment}
+                                            onChange={e => setCalcDownPayment(Number(e.target.value))}
+                                            className="w-full h-2 accent-primary cursor-pointer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                            <span>Prazo: <strong className="text-slate-800">{calcMonths / 12} anos</strong></span>
+                                            <span>{calcMonths} parcelas</span>
+                                        </div>
+                                        <input
+                                            type="range" min={60} max={420} step={60}
+                                            value={calcMonths}
+                                            onChange={e => setCalcMonths(Number(e.target.value))}
+                                            className="w-full h-2 accent-primary cursor-pointer"
+                                        />
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                        <p className="text-xs text-emerald-700 font-medium mb-1">Parcela Estimada</p>
+                                        <p className="text-2xl font-extrabold text-emerald-700">
+                                            R$ {monthlyPayment.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}<span className="text-sm font-bold">/mês</span>
+                                        </p>
+                                        <p className="text-xs text-emerald-600 mt-1">Financiado: R$ {financedAmount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} | Taxa {calcRate}% a.m.</p>
+                                    </div>
+                                    <button
+                                        onClick={handleNegotiateClick}
+                                        className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                                    >
+                                        <span className="material-symbols-outlined notranslate text-[18px]">handshake</span>
+                                        Quero Este Financiamento
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
