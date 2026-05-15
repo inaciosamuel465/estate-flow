@@ -37,7 +37,7 @@ const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({ phoneNumber, propertyTi
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3">
+        <div className="fixed bottom-24 right-4 md:bottom-6 md:right-6 z-[100] flex flex-col items-end gap-3">
             {/* Menu de Templates */}
             {isOpen && (
                 <div className="flex flex-col gap-2 mb-2 animate-in slide-in-from-bottom-4 duration-300">

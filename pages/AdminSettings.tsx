@@ -235,9 +235,9 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
     ];
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 overflow-y-auto md:overflow-hidden">
+        <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
             {/* Header Fixo */}
-            <div className="p-4 md:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between sticky top-0 z-20 gap-4">
+            <div className="p-4 md:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between z-20 gap-4 flex-shrink-0">
                 <div>
                     <h1 className="text-xl md:text-3xl font-bold text-slate-800">Configurações</h1>
                     <p className="text-xs md:text-sm text-slate-500">Gerencie sua plataforma</p>
@@ -271,7 +271,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                 {/* Sidebar de Navegação / Tab Bar Mobile */}
-                <div className="w-full md:w-64 bg-white border-r border-slate-200 p-2 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto no-scrollbar md:custom-scrollbar sticky top-0 md:relative z-10">
+                <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-2 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto no-scrollbar md:custom-scrollbar flex-shrink-0">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
@@ -289,7 +289,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 </div>
 
                 {/* Área de Conteúdo com Scroll */}
-                <div className="flex-1 overflow-y-visible md:overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
                     <form onSubmit={handleSave} className="max-w-4xl mx-auto space-y-8 pb-12">
                         
                         {activeTab === 'branding' && (

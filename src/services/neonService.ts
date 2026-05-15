@@ -157,10 +157,10 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 
 export async function upsertUser(user: User): Promise<void> {
     await sql`
-        INSERT INTO users (id, name, email, phone, role, document, address, favorites, password)
+        INSERT INTO users (id, name, email, phone, role, document, address, favorites, password, avatar)
         VALUES (${user.id}, ${user.name}, ${user.email}, ${(user as any).phone || null}, ${user.role}, 
                 ${(user as any).document || null}, ${(user as any).address || null}, 
-                ${user.favorites || []}, ${(user as any).password || null})
+                ${user.favorites || []}, ${(user as any).password || null}, ${(user as any).avatar || null})
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             email = EXCLUDED.email,
@@ -169,7 +169,8 @@ export async function upsertUser(user: User): Promise<void> {
             document = EXCLUDED.document,
             address = EXCLUDED.address,
             favorites = EXCLUDED.favorites,
-            password = COALESCE(EXCLUDED.password, users.password)
+            password = COALESCE(EXCLUDED.password, users.password),
+            avatar = EXCLUDED.avatar
     `;
 }
 

@@ -54,14 +54,18 @@ import OwnerLanding from './pages/OwnerLanding';
 import UserDashboard from './pages/UserDashboard';
 import ProfileSettings from './pages/ProfileSettings';
 import {
+  addUser,
   updateUser,
   logActivity,
 } from './src/services/dataService';
 import {
   createContractNotification,
   createPropertyNotification,
-  createLeadNotification
+  createLeadNotification,
+  registerServiceWorker,
+  requestNotificationPermission
 } from './src/services/notificationHelpers';
+import ReactPlayer from 'react-player';
 
 // --- Types ---
 import { ChatMessage, Conversation, User, Property, Contract, AppNotification } from './src/types';
@@ -75,6 +79,26 @@ const PublicLayout = ({ children }: { children?: React.ReactNode }) => (
 );
 
 const App: React.FC = () => {
+  // --- AI States ---
+  const [isAIThinking, setIsAIThinking] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [showPropertyPreview, setShowPropertyPreview] = useState<string | null>(null);
+
+  // --- Music State ---
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
+
+  // --- Effects ---
+  useEffect(() => {
+    const handleInteraction = () => setHasInteracted(true);
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+    };
+  }, []);
+
   // --- Global State ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -662,7 +686,27 @@ const App: React.FC = () => {
         );
 
         case 'map': return <InteractiveMap onSelectProperty={handlePropertySelect} properties={properties} />;
-        case 'crm': return <ClientProfile users={users} contracts={contracts} properties={properties} />;
+        case 'crm': return (
+          <ClientProfile 
+            users={users} 
+            contracts={contracts} 
+            properties={properties}
+            onUpdateUser={async (id, data) => {
+              const success = await updateUser(String(id), data);
+              if (success) {
+                setUsers(users.map(u => String(u.id) === String(id) ? { ...u, ...data } : u));
+              }
+              return success;
+            }}
+            onAddUser={async (data) => {
+              const newUser = await addUser(data);
+              if (newUser) {
+                setUsers([...users, newUser]);
+              }
+              return newUser !== null;
+            }}
+          />
+        );
         case 'admin-details': return (
           <PropertyDetails
             propertyId={selectedPropertyId}

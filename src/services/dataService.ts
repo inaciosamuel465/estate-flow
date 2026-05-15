@@ -117,6 +117,20 @@ export const getUsers = async (): Promise<User[]> => {
     return await neon.getUsers();
 };
 
+export const addUser = async (data: Omit<User, 'id'>): Promise<User | null> => {
+    try {
+        const newUser: User = {
+            ...data,
+            id: `user_${Date.now()}`
+        };
+        await neon.upsertUser(newUser);
+        return newUser;
+    } catch (error) {
+        console.error("Erro ao adicionar usuário:", error);
+        return null;
+    }
+};
+
 export const updateUser = async (id: string, data: Partial<User>): Promise<boolean> => {
     try {
         const user = await neon.getUserById(id);

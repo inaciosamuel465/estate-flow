@@ -15,13 +15,24 @@ interface ClientProfileProps {
     users: User[];
     contracts: Contract[];
     properties: Property[];
+    onUpdateUser?: (id: string | number, data: Partial<User>) => Promise<boolean>;
+    onAddUser?: (data: Omit<User, 'id'>) => Promise<boolean>;
 }
 
-const ClientProfile: React.FC<ClientProfileProps> = ({ users, contracts, properties }) => {
+const ClientProfile: React.FC<ClientProfileProps> = ({ users, contracts, properties, onUpdateUser, onAddUser }) => {
     const [selectedUserId, setSelectedUserId] = useState<number | string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<'Todos' | 'Admin' | 'Cliente' | 'Proprietário'>('Todos');
     const [noteInput, setNoteInput] = useState("");
+
+    // Edit State
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editForm, setEditForm] = useState<Partial<User>>({});
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Add Modal State
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [addForm, setAddForm] = useState({ name: '', email: '', role: 'client', phone: '' });
 
     // --- Derived Data ---
     const selectedUser = useMemo(() =>
@@ -78,12 +89,73 @@ const ClientProfile: React.FC<ClientProfileProps> = ({ users, contracts, propert
     if (!selectedUserId || !selectedUser) {
         return (
             <div className="bg-slate-50 dark:bg-background-dark text-slate-900 dark:text-white font-display h-full flex flex-col overflow-hidden">
-                <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111318] px-6 py-4">
+                <header className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111318] px-6 py-4 gap-4">
                     <div>
                         <h2 className="text-xl font-bold">Relacionamentos (CRM)</h2>
                         <p className="text-xs text-slate-500">Gestão de Clientes, Proprietários e Equipe.</p>
                     </div>
+                    {onAddUser && (
+                        <button 
+                            onClick={() => setShowAddModal(true)}
+                            className="bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-transform flex items-center gap-2"
+                        >
+                            <span className="material-symbols-outlined text-lg">person_add</span>
+                            Novo Usuário
+                        </button>
+                    )}
                 </header>
+
+                {showAddModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold dark:text-white">Adicionar Usuário</h3>
+                                <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-slate-800 dark:hover:text-white">
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Nome Completo</label>
+                                    <input type="text" value={addForm.name} onChange={e => setAddForm({...addForm, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary" placeholder="João Silva" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">E-mail</label>
+                                    <input type="email" value={addForm.email} onChange={e => setAddForm({...addForm, email: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary" placeholder="joao@exemplo.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Telefone</label>
+                                    <input type="text" value={addForm.phone} onChange={e => setAddForm({...addForm, phone: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary" placeholder="(11) 99999-9999" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Permissão</label>
+                                    <select value={addForm.role} onChange={e => setAddForm({...addForm, role: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary">
+                                        <option value="client">Cliente</option>
+                                        <option value="owner">Proprietário</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        setIsSaving(true);
+                                        const success = await onAddUser?.(addForm as any);
+                                        if (success) {
+                                            setShowAddModal(false);
+                                            setAddForm({ name: '', email: '', role: 'client', phone: '' });
+                                        } else {
+                                            alert("Erro ao criar usuário");
+                                        }
+                                        setIsSaving(false);
+                                    }}
+                                    disabled={isSaving || !addForm.name || !addForm.email}
+                                    className="w-full py-3 bg-primary text-white rounded-xl font-bold mt-4 hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                    {isSaving ? 'Salvando...' : 'Salvar Usuário'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="p-6 pb-2">
                     <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-[#1a1d23] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -177,28 +249,91 @@ const ClientProfile: React.FC<ClientProfileProps> = ({ users, contracts, propert
             <main className="flex-1 w-full max-w-[1400px] mx-auto p-4 md:p-8 flex flex-col gap-6 overflow-y-auto">
                 {/* Header do Perfil */}
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 bg-white dark:bg-[#1a1d23] p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex gap-4 items-center">
-                        <div className="size-20 rounded-full bg-slate-200 flex items-center justify-center text-2xl font-bold border-2 border-primary">
-                            {selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full object-cover rounded-full" /> : selectedUser.name.charAt(0)}
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold">{selectedUser.name}</h1>
-                            <p className="text-slate-500 text-sm">{selectedUser.email}</p>
-                            <div className="flex gap-2 mt-2">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(selectedUser.role)} uppercase`}>
-                                    {selectedUser.role}
-                                </span>
+                    {isEditMode ? (
+                        <div className="flex-1 space-y-4">
+                            <div className="flex items-center gap-4">
+                                <label className="size-20 rounded-full bg-slate-200 flex items-center justify-center text-2xl font-bold border-2 border-dashed border-slate-400 cursor-pointer overflow-hidden group relative">
+                                    {editForm.avatar ? <img src={editForm.avatar} className="w-full h-full object-cover rounded-full" /> : selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full object-cover rounded-full" /> : selectedUser.name.charAt(0)}
+                                    <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white">
+                                        <span className="material-symbols-outlined text-sm">upload</span>
+                                    </div>
+                                    <input 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => setEditForm({...editForm, avatar: reader.result as string});
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }} 
+                                    />
+                                </label>
+                                <div className="text-xs text-slate-500">Clique para alterar a foto</div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <input type="text" value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="p-3 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" placeholder="Nome" />
+                                <input type="email" value={editForm.email || ''} onChange={e => setEditForm({...editForm, email: e.target.value})} className="p-3 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" placeholder="E-mail" />
+                                <input type="text" value={editForm.phone || ''} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="p-3 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700" placeholder="Telefone" />
+                                <select value={editForm.role || 'client'} onChange={e => setEditForm({...editForm, role: e.target.value as any})} className="p-3 border border-slate-200 rounded-lg dark:bg-slate-800 dark:border-slate-700">
+                                    <option value="client">Cliente</option>
+                                    <option value="owner">Proprietário</option>
+                                    <option value="admin">Administrador</option>
+                                </select>
+                            </div>
+                            <div className="flex gap-2 pt-2">
+                                <button onClick={async () => {
+                                    setIsSaving(true);
+                                    if (onUpdateUser) {
+                                        await onUpdateUser(selectedUser.id, editForm);
+                                    }
+                                    setIsSaving(false);
+                                    setIsEditMode(false);
+                                }} disabled={isSaving} className="bg-primary text-white px-6 py-2 rounded-lg font-bold text-sm">
+                                    {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                                </button>
+                                <button onClick={() => setIsEditMode(false)} className="bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold text-sm hover:bg-slate-300">Cancelar</button>
                             </div>
                         </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <button onClick={handleCall} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
-                            <span className="material-symbols-outlined text-[18px]">call</span> Ligar
-                        </button>
-                        <button onClick={handleEmail} className="flex items-center gap-2 bg-white dark:bg-[#111318] border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-lg font-bold text-sm">
-                            <span className="material-symbols-outlined text-[18px]">mail</span> Email
-                        </button>
-                    </div>
+                    ) : (
+                        <>
+                            <div className="flex gap-4 items-center">
+                                <div className="size-20 rounded-full bg-slate-200 flex items-center justify-center text-2xl font-bold border-2 border-primary overflow-hidden">
+                                    {selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full object-cover rounded-full" /> : selectedUser.name.charAt(0)}
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-bold">{selectedUser.name}</h1>
+                                    <p className="text-slate-500 text-sm">{selectedUser.email}</p>
+                                    <div className="flex gap-2 mt-2">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(selectedUser.role)} uppercase`}>
+                                            {selectedUser.role}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {onUpdateUser && (
+                                    <button 
+                                        onClick={() => {
+                                            setEditForm({ name: selectedUser.name, email: selectedUser.email, phone: selectedUser.phone, role: selectedUser.role, avatar: selectedUser.avatar });
+                                            setIsEditMode(true);
+                                        }} 
+                                        className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">edit</span> Editar
+                                    </button>
+                                )}
+                                <button onClick={handleCall} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined text-[18px]">call</span> Ligar
+                                </button>
+                                <button onClick={handleEmail} className="flex items-center gap-2 bg-white dark:bg-[#111318] border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-lg font-bold text-sm">
+                                    <span className="material-symbols-outlined text-[18px]">mail</span> Email
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { User, Property } from '../src/types';
+import ReactPlayer from 'react-player';
 
 interface ClientHomeProps {
     properties: Property[];
@@ -46,6 +47,20 @@ const ClientHome: React.FC<ClientHomeProps> = ({
         purpose: 'any' // 'sale', 'rent' or 'any'
     });
 
+    // --- Music State ---
+    const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+    const [hasInteracted, setHasInteracted] = useState(false);
+
+    React.useEffect(() => {
+        const handleInteraction = () => setHasInteracted(true);
+        window.addEventListener('click', handleInteraction, { once: true });
+        window.addEventListener('touchstart', handleInteraction, { once: true });
+        return () => {
+            window.removeEventListener('click', handleInteraction);
+            window.removeEventListener('touchstart', handleInteraction);
+        };
+    }, []);
+
     // --- Lógica de Filtragem ---
     const filteredProperties = useMemo(() => {
         return properties.filter(property => {
@@ -86,6 +101,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
     }, [searchText, selectedCategory, properties, filters]);
 
     return (
+        <>
         <div className="min-h-screen bg-[#F8F9FC] flex flex-col font-display selection:bg-primary/20 selection:text-primary pb-20 md:pb-0">
 
             {/* Styles for Animations & Patterns */}
@@ -178,17 +194,19 @@ const ClientHome: React.FC<ClientHomeProps> = ({
 
             <main className="flex-1">
 
-                {/* --- HERO SECTION LUXO (MANTIDA COM PEQUENOS AJUSTES) --- */}
-                <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden">
-                    <div className="absolute inset-0 w-full h-full z-0 overflow-hidden bg-slate-900">
-                        <iframe
-                            src="https://www.youtube.com/embed/UBdgfwoZpNE?autoplay=1&mute=1&loop=1&controls=0&playlist=UBdgfwoZpNE&playsinline=1&rel=0&showinfo=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0&cc_load_policy=0&start=0"
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-80 pointer-events-none"
-                            style={{ width: '177.78vh', height: '100vh', minWidth: '100%', minHeight: '56.25vw', border: 'none' }}
-                            allow="autoplay; encrypted-media"
-                            title="Hero background video"
-                        />
-                    </div>
+                {/* --- HERO SECTION LUXO --- */}
+                <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300vw] h-[300vh] md:w-[150vw] md:h-[150vh] opacity-80 pointer-events-none">
+                            <iframe
+                                src="https://www.youtube.com/embed/UBdgfwoZpNE?autoplay=1&mute=1&loop=1&controls=0&playlist=UBdgfwoZpNE&playsinline=1&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3"
+                                className="w-full h-full"
+                                style={{ border: 'none', pointerEvents: 'none' }}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                title="Hero background video"
+                            />
+                        </div>
+                        {/* Overlay invisível para bloquear qualquer toque no vídeo em celulares */}
+                        <div className="absolute inset-0 z-20 w-full h-full bg-transparent" style={{ touchAction: 'none' }}></div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#F8F9FC] via-slate-900/40 to-black/40 z-10"></div>
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 z-10 mix-blend-overlay"></div>
 
@@ -542,6 +560,51 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                 </button>
             </nav>
         </div >
+
+        {/* Music Player Yasashi */}
+        <div className="absolute opacity-0 pointer-events-none w-[1px] h-[1px] overflow-hidden -z-50">
+            <ReactPlayer
+                url="https://www.youtube.com/watch?v=4kp4dtAsWZQ"
+                playing={isMusicPlaying && hasInteracted}
+                loop={true}
+                volume={0.5}
+                width="100%"
+                height="100%"
+                config={{
+                    youtube: {
+                        // @ts-ignore
+                        playerVars: { autoplay: 1 }
+                    }
+                }}
+            />
+        </div>
+
+        {/* Botão Flutuante de Música */}
+        <div className="fixed bottom-[110px] md:bottom-24 left-6 z-[100]">
+            <button
+                onClick={() => setIsMusicPlaying(!isMusicPlaying)}
+                className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all transform hover:scale-105 active:scale-95 ${
+                    isMusicPlaying 
+                    ? 'bg-slate-900 text-white dark:bg-primary border border-white/10' 
+                    : 'bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}
+            >
+                <span className="material-symbols-outlined text-[24px]">
+                    {isMusicPlaying ? 'music_note' : 'music_off'}
+                </span>
+                <span className="text-sm font-bold hidden sm:inline">
+                    {isMusicPlaying ? 'Música Ambiente' : 'Música Silenciada'}
+                </span>
+                {isMusicPlaying && (
+                    <div className="flex gap-1 items-end h-4 ml-2">
+                        <div className="w-1.5 bg-current animate-[bounce_1s_infinite_0ms] rounded-full h-full"></div>
+                        <div className="w-1.5 bg-current animate-[bounce_1s_infinite_200ms] rounded-full h-2/3"></div>
+                        <div className="w-1.5 bg-current animate-[bounce_1s_infinite_400ms] rounded-full h-full"></div>
+                    </div>
+                )}
+            </button>
+        </div>
+        </>
     );
 };
 
