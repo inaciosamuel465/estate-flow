@@ -29,7 +29,7 @@ export interface User {
     id: number | string;
     name: string;
     email: string;
-    role: 'admin' | 'owner' | 'client';
+    role: 'admin' | 'owner' | 'client' | 'visitor';
     phone?: string;
     avatar?: string;
     document?: string;

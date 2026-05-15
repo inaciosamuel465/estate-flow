@@ -2,6 +2,13 @@ import { Property, Contract, User, Conversation, ChatMessage, AppNotification as
 import * as neon from "./neonService";
 import type { Lead } from "./neonService";
 
+async function hashPassword(password: string): Promise<string> {
+    const msgUint8 = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PROPERTIES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -117,12 +124,15 @@ export const getUsers = async (): Promise<User[]> => {
     return await neon.getUsers();
 };
 
-export const addUser = async (data: Omit<User, 'id'>): Promise<User | null> => {
+export const addUser = async (data: Omit<User, 'id'> & { password?: string }): Promise<User | null> => {
     try {
         const newUser: User = {
             ...data,
             id: `user_${Date.now()}`
-        };
+        } as User;
+        if (data.password) {
+            (newUser as any).password = await hashPassword(data.password);
+        }
         await neon.upsertUser(newUser);
         return newUser;
     } catch (error) {
@@ -135,12 +145,26 @@ export const updateUser = async (id: string, data: Partial<User>): Promise<boole
     try {
         const user = await neon.getUserById(id);
         if (user) {
-            await neon.upsertUser({ ...user, ...data } as User);
+            const updateData = { ...data } as any;
+            if (updateData.password) {
+                updateData.password = await hashPassword(updateData.password);
+            }
+            await neon.upsertUser({ ...user, ...updateData } as User);
             return true;
         }
         return false;
     } catch (error) {
         console.error("Erro ao atualizar usuário:", error);
+        return false;
+    }
+};
+
+export const deleteUser = async (id: string): Promise<boolean> => {
+    try {
+        await neon.deleteUser(id);
+        return true;
+    } catch (error) {
+        console.error("Erro ao excluir usuário:", error);
         return false;
     }
 };

@@ -3,6 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import nodemailer from 'nodemailer';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -55,14 +56,34 @@ export default defineConfig(({ mode }) => {
               }
 
               if (req.url === '/api/email/send') {
-                // Aqui seria o nodemailer, mas para não complicar o config.js
-                // vamos apenas simular o sucesso se as envs existirem
-                const canSend = !!(env.SMTP_HOST && env.SMTP_USER);
-                if (canSend) {
-                    res.end(JSON.stringify({ success: true, message: 'Simulado com sucesso' }));
-                } else {
-                    res.statusCode = 500;
-                    res.end(JSON.stringify({ error: 'SMTP não configurado no .env' }));
+                const canSend = !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+                if (!canSend) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ error: 'SMTP não configurado no .env' }));
+                  return;
+                }
+                try {
+                  const chunks: Buffer[] = [];
+                  for await (const chunk of req) chunks.push(chunk as Buffer);
+                  const body = JSON.parse(Buffer.concat(chunks).toString());
+                  const { to, subject, html } = body;
+                  if (!to) throw new Error('Destinatário (to) é obrigatório');
+                  const transporter = nodemailer.createTransport({
+                    host: env.SMTP_HOST,
+                    port: Number(env.SMTP_PORT) || 587,
+                    secure: env.SMTP_SECURE === 'true',
+                    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+                    tls: { rejectUnauthorized: false },
+                  });
+                  const info = await transporter.sendMail({
+                    from: `"EstateFlow Suite" <${env.SMTP_USER}>`,
+                    to, subject, html,
+                  });
+                  res.end(JSON.stringify({ success: true, messageId: info.messageId }));
+                } catch (err: any) {
+                  console.error('Erro ao enviar email:', err);
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ error: err.message || 'Erro ao enviar email' }));
                 }
                 return;
               }

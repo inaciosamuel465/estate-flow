@@ -174,6 +174,10 @@ export async function upsertUser(user: User): Promise<void> {
     `;
 }
 
+export async function deleteUser(id: string): Promise<void> {
+    await sql`DELETE FROM users WHERE id = ${id}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTRACTS
 // ─────────────────────────────────────────────────────────────────────────────

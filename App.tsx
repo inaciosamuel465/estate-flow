@@ -15,6 +15,7 @@ import MarketingStudio from './pages/MarketingStudio';
 import ContractsPage from './pages/ContractsPage';
 import Analytics from './pages/Analytics';
 import AIAnalytics from './pages/AIAnalytics';
+import UsersManagement from './pages/UsersManagement';
 import AdminSettings from './pages/AdminSettings';
 import NotificationCenter from './components/NotificationCenter';
 import WhatsAppButton from './components/WhatsAppButton';
@@ -56,6 +57,7 @@ import ProfileSettings from './pages/ProfileSettings';
 import {
   addUser,
   updateUser,
+  deleteUser as deleteUserService,
   logActivity,
 } from './src/services/dataService';
 import {
@@ -193,6 +195,7 @@ const App: React.FC = () => {
       if (p === '/admin/analytics') return 'analytics';
       if (p === '/admin/profile-settings') return 'profile-settings';
       if (p === '/admin/settings') return 'settings';
+      if (p === '/admin/users') return 'users';
       return 'dashboard';
     }
     return 'home';
@@ -222,6 +225,7 @@ const App: React.FC = () => {
       'analytics': '/admin/analytics',
       'profile-settings': '/admin/profile-settings',
       'settings': '/admin/settings',
+      'users': '/admin/users',
       'home': '/',
       'login': '/login',
       'advertise': '/advertise',
@@ -385,6 +389,56 @@ const App: React.FC = () => {
     const success = await updateUser(String(currentUser.id), updatedData);
     if (success) {
       setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
+    }
+  };
+
+  const handleDeleteUser = async (id: string | number): Promise<boolean> => {
+    const success = await deleteUserService(String(id));
+    if (success) {
+      setUsers(prev => prev.filter(u => String(u.id) !== String(id)));
+    }
+    return success;
+  };
+
+  const handleSendCredentials = async (user: User, password: string): Promise<boolean> => {
+    try {
+      const siteUrl = 'https://estate-flow-amber.vercel.app';
+      const loginUrl = `${siteUrl}/login`;
+      const res = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: user.email,
+          subject: `Bem-vindo ao EstateFlow - Suas Credenciais de Acesso`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="background: linear-gradient(135deg, #2b6cee, #4f46e5); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">Bem-vindo ao EstateFlow!</h1>
+              </div>
+              <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
+                <p style="color: #334155; font-size: 16px;">Olá <strong>${user.name}</strong>,</p>
+                <p style="color: #64748b; font-size: 14px;">Sua conta foi criada no EstateFlow Suite. Utilize as credenciais abaixo para acessar o sistema:</p>
+                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
+                  <p style="margin: 5px 0; color: #334155;"><strong>Email:</strong> ${user.email}</p>
+                  <p style="margin: 5px 0; color: #334155;"><strong>Senha:</strong> ${password}</p>
+                  <p style="margin: 5px 0; color: #334155;"><strong>Papel:</strong> ${user.role === 'admin' ? 'Administrador' : user.role === 'owner' ? 'Proprietário' : user.role === 'client' ? 'Cliente' : 'Visitante'}</p>
+                </div>
+                <a href="${loginUrl}" style="display: inline-block; background: #2b6cee; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 10px 0;">Acessar o Sistema</a>
+                <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">Por segurança, recomendamos alterar sua senha após o primeiro acesso.</p>
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+                <p style="color: #64748b; font-size: 12px; text-align: center;">
+                  <a href="${siteUrl}" style="color: #2b6cee;">${siteUrl}</a>
+                </p>
+              </div>
+            </div>
+          `,
+        }),
+      });
+      const data = await res.json();
+      return data.success === true;
+    } catch (e) {
+      console.error('Erro ao enviar email:', e);
+      return false;
     }
   };
 
@@ -733,6 +787,27 @@ const App: React.FC = () => {
             onSettingsUpdated={setSettings}
           />
         );
+        case 'users': return (
+          <UsersManagement
+            users={users}
+            onUpdateUser={async (id, data) => {
+              const success = await updateUser(String(id), data);
+              if (success) {
+                setUsers(users.map(u => String(u.id) === String(id) ? { ...u, ...data } : u));
+              }
+              return success;
+            }}
+            onAddUser={async (data) => {
+              const newUser = await addUser(data);
+              if (newUser) {
+                setUsers([...users, newUser]);
+              }
+              return newUser !== null;
+            }}
+            onDeleteUser={handleDeleteUser}
+            onSendCredentials={handleSendCredentials}
+          />
+        );
         default: return <AdminDashboard onNavigate={setCurrentView} />;
       }
     };
@@ -781,6 +856,7 @@ const App: React.FC = () => {
                   <MobileAdminNavButton active={currentView === 'marketing'} onClick={() => { setCurrentView('marketing'); setIsMobileMenuOpen(false); }} icon="campaign" label="Marketing" />
                   <MobileAdminNavButton active={currentView === 'ai-analytics'} onClick={() => { setCurrentView('ai-analytics'); setIsMobileMenuOpen(false); }} icon="psychology" label="IA Analytics" />
                   <MobileAdminNavButton active={currentView === 'financial'} onClick={() => { setCurrentView('financial'); setIsMobileMenuOpen(false); }} icon="payments" label="Financeiro" />
+                  <MobileAdminNavButton active={currentView === 'users'} onClick={() => { setCurrentView('users'); setIsMobileMenuOpen(false); }} icon="group" label="Usuários" />
                   <MobileAdminNavButton active={currentView === 'settings'} onClick={() => { setCurrentView('settings'); setIsMobileMenuOpen(false); }} icon="settings" label="Ajustes" />
                 </div>
               </div>
@@ -836,6 +912,7 @@ const App: React.FC = () => {
             <NavButton active={currentView === 'ai-analytics'} onClick={() => setCurrentView('ai-analytics')} icon="psychology" tooltip="IA Analytics & Leads" />
             <NavButton active={currentView === 'financial'} onClick={() => setCurrentView('financial')} icon="payments" tooltip="Financeiro" />
             <NavButton active={currentView === 'analytics'} onClick={() => setCurrentView('analytics')} icon="bar_chart" tooltip="Analytics" />
+            <NavButton active={currentView === 'users'} onClick={() => setCurrentView('users')} icon="group" tooltip="Gerenciar Usuários" />
             <NavButton active={currentView === 'settings'} onClick={() => setCurrentView('settings')} icon="settings_suggest" tooltip="Configurações Globais" />
             <NavButton active={currentView === 'profile-settings'} onClick={() => setCurrentView('profile-settings')} icon="person" tooltip="Configurações da Conta" />
           </div>

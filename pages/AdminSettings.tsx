@@ -176,9 +176,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
 
         const normalizedTemplates = normalizeTemplates(settings.contractTemplates);
 
+        const { contractTemplates: _, ...restSettings } = settings;
         setLocalSettings(prev => ({
             ...prev,
-            ...settings,
+            ...restSettings,
             ...(normalizedTemplates ? { contractTemplates: normalizedTemplates } : {})
         }));
     }, [settings]);
