@@ -1,5 +1,5 @@
 import { neon, neonConfig } from '@neondatabase/serverless';
-import { Property, Contract, User, Conversation, Notification } from '../types';
+import { Property, Contract, User, Conversation, ChatMessage, AppNotification } from '../types';
 
 neonConfig.disableWarningInBrowsers = true;
 const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
@@ -316,16 +316,16 @@ export async function updateLeadStatus(id: string, status: Lead['status']): Prom
 // NOTIFICATIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function addNotification(notification: Omit<Notification, 'id' | 'timestamp' | 'read'>): Promise<void> {
+export async function addNotification(notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'> & { userId?: string }): Promise<void> {
     await sql`
         INSERT INTO notifications (user_id, type, title, message, action_url, icon, priority)
-        VALUES (${(notification as any).userId}, ${notification.type}, ${notification.title}, 
-                ${notification.message}, ${(notification as any).actionUrl || null}, 
-                ${notification.icon || null}, ${(notification as any).priority || 'medium'})
+        VALUES (${notification.userId || null}, ${notification.type}, ${notification.title}, 
+                ${notification.message}, ${notification.actionUrl || null}, 
+                ${notification.icon || null}, ${notification.priority || 'medium'})
     `;
 }
 
-export async function getNotifications(userId: string): Promise<Notification[]> {
+export async function getNotifications(userId: string): Promise<AppNotification[]> {
     const result = await sql`
         SELECT * FROM notifications WHERE user_id = ${userId}
         ORDER BY created_at DESC LIMIT 50
@@ -340,8 +340,7 @@ export async function getNotifications(userId: string): Promise<Notification[]> 
         actionUrl: row.action_url,
         icon: row.icon,
         priority: row.priority,
-        userId: row.user_id,
-    })) as unknown as Notification[];
+    })) as unknown as AppNotification[];
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

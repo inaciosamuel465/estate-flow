@@ -65,6 +65,7 @@ import {
 
 // --- Types ---
 import { ChatMessage, Conversation, User, Property, Contract, AppNotification } from './src/types';
+export { AppErrorBoundary } from './components/AppErrorBoundary';
 
 // Wrapper de Scroll
 const PublicLayout = ({ children }: { children?: React.ReactNode }) => (
@@ -80,6 +81,8 @@ const App: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   // --- Auth Subscription & Data Loading ---
   useEffect(() => {
@@ -97,17 +100,23 @@ const App: React.FC = () => {
 
     // Carregar dados reais
     const loadData = async () => {
-      const props = await getProperties();
-      setProperties(props);
-
-      const conts = await getContracts();
-      setContracts(conts);
-
-      const userList = await getUsers();
-      setUsers(userList);
-
-      const globalSettings = await getSettings();
-      setSettings(globalSettings);
+      try {
+        const [props, conts, userList, globalSettings] = await Promise.all([
+          getProperties(),
+          getContracts(),
+          getUsers(),
+          getSettings(),
+        ]);
+        setProperties(props);
+        setContracts(conts);
+        setUsers(userList);
+        setSettings(globalSettings);
+      } catch (err: any) {
+        console.error('Falha ao carregar dados iniciais:', err);
+        setDataLoadError('Não foi possível conectar ao banco de dados. Verifique sua conexão e recarregue.');
+      } finally {
+        setIsInitialLoading(false);
+      }
     }
     loadData();
 
@@ -536,6 +545,36 @@ const App: React.FC = () => {
   };
 
   // --- Render Logic ---
+
+  // 0. Loading inicial
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
+        <div className="size-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <p className="text-slate-500 font-semibold">Carregando EstateFlow...</p>
+      </div>
+    );
+  }
+
+  // 0b. Erro de dados
+  if (dataLoadError) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="size-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-6">
+          <span className="material-symbols-outlined text-4xl">cloud_off</span>
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Falha na Conexão</h1>
+        <p className="text-slate-500 mb-8 max-w-md">{dataLoadError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-8 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined">refresh</span>
+          Tentar Novamente
+        </button>
+      </div>
+    );
+  }
 
   // 1. Visão de Admin (Logado e role='admin')
   if (currentUser?.role === 'admin') {

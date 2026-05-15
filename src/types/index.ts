@@ -69,6 +69,22 @@ export interface Property {
         state: string;
         zip: string;
     };
+    lat?: number;
+    lng?: number;
+    x?: number;
+    y?: number;
+}
+
+export interface AppSettings {
+    logoUrl?: string;
+    companyName?: string;
+    primaryColor?: string;
+    whatsappNumber?: string;
+    smtpEmail?: string;
+    smtpPassword?: string;
+    smtpHost?: string;
+    smtpPort?: string;
+    [key: string]: string | undefined;
 }
 
 export interface Contract {
