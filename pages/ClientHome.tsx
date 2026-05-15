@@ -181,13 +181,12 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                 {/* --- HERO SECTION LUXO (MANTIDA COM PEQUENOS AJUSTES) --- */}
                 <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden">
                     <div className="absolute inset-0 w-full h-full z-0 overflow-hidden bg-slate-900">
-                        <video
-                            src="/video.hero.mp4"
-                            className="w-full h-full object-cover opacity-80"
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
+                        <iframe
+                            src="https://www.youtube.com/embed/UBdgfwoZpNE?autoplay=1&mute=1&loop=1&controls=0&playlist=UBdgfwoZpNE&playsinline=1&rel=0&showinfo=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0&cc_load_policy=0&start=0"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-80 pointer-events-none"
+                            style={{ width: '177.78vh', height: '100vh', minWidth: '100%', minHeight: '56.25vw', border: 'none' }}
+                            allow="autoplay; encrypted-media"
+                            title="Hero background video"
                         />
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#F8F9FC] via-slate-900/40 to-black/40 z-10"></div>
