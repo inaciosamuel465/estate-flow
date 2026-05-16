@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { loginUser, registerUser } from '../src/services/authService';
-// Import User type if needed, but we can reuse the one from App or define commonly
+import { loginUser, registerUser, loginWithGoogle } from '../src/services/authService';
+import { GoogleLogin } from '@react-oauth/google';
 import type { User } from '../src/types';
 
 export interface RegisterData {
@@ -12,12 +12,13 @@ export interface RegisterData {
 }
 
 interface LoginPageProps {
-  onLoginSuccess: (user: User) => void; // UPDATED to return full User
-  onRegisterSuccess: (user: User) => void; // UPDATED to return full User
+  onLoginSuccess: (user: User) => void;
+  onRegisterSuccess: (user: User) => void;
   onCancel: () => void;
+  companyId?: string;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess, onCancel }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess, onCancel, companyId }) => {
   const [isLoginMode, setIsLoginMode] = useState(true);
 
   // Login State
@@ -213,6 +214,39 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
             )}
           </button>
         </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-slate-200" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="bg-white px-4 text-slate-400 font-medium">ou</span>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={async (credentialResponse) => {
+              try {
+                const payload = JSON.parse(atob(credentialResponse.credential!.split('.')[1]));
+                const response = await loginWithGoogle(payload.email, payload.name, payload.picture, companyId);
+                if (response.user) {
+                  onLoginSuccess(response.user);
+                } else {
+                  setError(response.error || "Erro ao autenticar com Google");
+                }
+              } catch (err) {
+                setError("Erro ao processar login com Google");
+              }
+            }}
+            onError={() => setError("Erro ao autenticar com Google")}
+            theme="outline"
+            size="large"
+            text="continue_with"
+            shape="rectangular"
+            width="100%"
+          />
+        </div>
 
         <div className="mt-6 text-center">
           <button onClick={onCancel} className="text-slate-500 hover:text-primary text-sm font-medium transition-colors">

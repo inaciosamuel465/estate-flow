@@ -2,6 +2,12 @@ import * as neon from "./neonService";
 import type { User } from "../types";
 import type { RegisterData } from "../../pages/LoginPage";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS (moved inline from companyFilter.ts)
+// ─────────────────────────────────────────────────────────────────────────────
+function setStoredCompanyId(id: string) { localStorage.setItem('companyId', id); }
+function clearStoredCompanyId() { localStorage.removeItem('companyId'); }
+
 // Tipos de resposta para facilitar o uso no Front
 export interface AuthResponse {
     user: User | null;
@@ -18,6 +24,10 @@ const saveSession = (user: User) => {
 
 const clearSession = () => {
     localStorage.removeItem(SESSION_KEY);
+    clearStoredCompanyId();
+    localStorage.removeItem('estateflow_company_id');
+    localStorage.removeItem('estateflow_company_data');
+    localStorage.removeItem('estateflow_company_settings');
     window.dispatchEvent(new Event("auth-change"));
 };
 
@@ -52,6 +62,8 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
         const userId = data.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
         const hashedPassword = await hashPassword(data.password);
 
+        const companyId = 'default';
+        setStoredCompanyId(companyId);
 
         const userData: User = {
             id: userId,
@@ -60,7 +72,8 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
             phone: data.phone,
             role: (data.email === 'admin@estateflow.com' ? 'admin' : data.role) as any,
             favorites: [],
-            password: hashedPassword // Campo novo
+            password: hashedPassword,
+            company_id: companyId,
         } as any;
 
         await neon.upsertUser(userData);
@@ -92,6 +105,10 @@ export const loginUser = async (email: string, pass: string): Promise<AuthRespon
         if (!Array.isArray(safeUser.favorites)) {
             safeUser.favorites = [];
         }
+        
+        const companyId = (safeUser as any).company_id || 'default';
+        setStoredCompanyId(companyId);
+        
         saveSession(safeUser);
         
         return { user: safeUser as User };
@@ -103,6 +120,38 @@ export const loginUser = async (email: string, pass: string): Promise<AuthRespon
 
 export const logoutUser = async () => {
     clearSession();
+};
+
+export const loginWithGoogle = async (email: string, name: string, avatar: string, company_id = 'default'): Promise<AuthResponse> => {
+    try {
+        const existingUser = await neon.getUserByEmail(email);
+        if (existingUser) {
+            const { password: _, ...safeUser } = existingUser as any;
+            if (!Array.isArray(safeUser.favorites)) safeUser.favorites = [];
+            setStoredCompanyId(safeUser.company_id || company_id);
+            saveSession(safeUser);
+            return { user: safeUser as User };
+        }
+
+        const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const newUser: User = {
+            id: userId,
+            name,
+            email,
+            avatar,
+            role: 'client',
+            favorites: [],
+            company_id,
+        } as any;
+
+        await neon.upsertUser(newUser);
+        setStoredCompanyId(company_id);
+        saveSession(newUser);
+        return { user: newUser };
+    } catch (error: any) {
+        console.error("Erro no login com Google:", error);
+        return { user: null, error: "Erro ao autenticar com Google." };
+    }
 };
 
 // Hook para observar o estado

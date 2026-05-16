@@ -90,12 +90,14 @@ export const NotificationProvider: React.FC<Props> = ({
       });
 
       // 3. Salva no Banco de Dados via API
+      const companyId = localStorage.getItem('estateflow_company_id');
       await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subscription,
-          userId: userId || null
+          userId: userId || null,
+          companyId: companyId || 'default'
         })
       });
       console.log('[Native Push] Dispositivo inscrito com sucesso.');

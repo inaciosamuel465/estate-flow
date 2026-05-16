@@ -179,7 +179,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
             updateEditor('title', selectedProperty.title.toUpperCase());
             updateEditor('price', selectedProperty.price || 'Consulte');
             updateEditor('feature1Value', selectedProperty.location || 'Exclusiva');
-            if (selectedProperty.bedrooms) updateEditor('feature2Value', `${selectedProperty.bedrooms} Quartos`);
+            if (selectedProperty.beds) updateEditor('feature2Value', `${selectedProperty.beds} Quartos`);
             if (selectedProperty.area) updateEditor('feature3Value', `${selectedProperty.area}m²`);
         }
     }, [selectedPropertyId]);

@@ -1,3 +1,79 @@
+export interface Company {
+    id: string;
+    name: string;
+    slug?: string;
+    subdomain?: string;
+    cnpj?: string;
+    email?: string;
+    phone?: string;
+    logo_url?: string;
+    favicon_url?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    status: 'active' | 'inactive' | 'suspended';
+    plan?: string;
+    trial_ends_at?: string;
+    subscription_status: 'active' | 'overdue' | 'canceled' | 'suspended' | 'trialing';
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface Subscription {
+    id: string;
+    company_id: string;
+    plan_name: string;
+    status: 'active' | 'overdue' | 'canceled' | 'suspended' | 'trialing';
+    payment_gateway?: string;
+    gateway_subscription_id?: string;
+    started_at?: string;
+    expires_at?: string;
+    trial?: boolean;
+    created_at?: string;
+}
+
+export interface Payment {
+    id: string;
+    company_id: string;
+    subscription_id?: string;
+    gateway_payment_id?: string;
+    amount: number;
+    status: 'pending' | 'paid' | 'failed' | 'refunded';
+    payment_method?: string;
+    paid_at?: string;
+    created_at?: string;
+}
+
+export interface CompanySettings {
+    company_id: string;
+    company_name?: string;
+    logo_url?: string;
+    favicon_url?: string;
+    background_image?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    smtp_host?: string;
+    smtp_port?: number;
+    smtp_user?: string;
+    smtp_password?: string;
+    smtp_secure?: boolean;
+    email_sender_name?: string;
+    email_sender_address?: string;
+    whatsapp?: string;
+    instagram?: string;
+    facebook?: string;
+    website?: string;
+    custom_css?: string;
+}
+
+export interface MasterUser {
+    id: string;
+    name: string;
+    email: string;
+    password?: string;
+    role: 'admin' | 'superadmin';
+    created_at?: string;
+}
+
 export interface User {
     id: number | string;
     name: string;
@@ -9,6 +85,7 @@ export interface User {
     address?: string;
     favorites?: string[];
     password?: string;
+    company_id?: string;
 }
 
 
@@ -46,12 +123,14 @@ export interface Property {
     lng?: number;
     x?: number;
     y?: number;
+    company_id?: string;
 }
 
 export interface AppSettings {
     logoUrl?: string;
     companyName?: string;
     primaryColor?: string;
+    secondaryColor?: string;
     whatsappNumber?: string;
     smtpEmail?: string;
     smtpPassword?: string;
@@ -87,6 +166,7 @@ export interface Contract {
     customContent?: string;
     signatureImage?: string;
     signedAt?: string;
+    company_id?: string;
 }
 
 export interface AppNotification {
@@ -99,4 +179,5 @@ export interface AppNotification {
     actionUrl?: string;
     icon?: string;
     priority?: 'low' | 'medium' | 'high';
+    company_id?: string;
 }

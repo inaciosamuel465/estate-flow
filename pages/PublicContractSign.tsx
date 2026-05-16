@@ -123,66 +123,68 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
     }
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="max-w-[1000px] mx-auto px-4 py-8">
-                <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            {logoUrl && <img src={logoUrl} className="h-10 w-10 object-contain rounded-lg" alt="" />}
-                            <div>
-                                <h1 className="text-lg font-bold text-slate-900">{contract.propertyTitle}</h1>
-                                <p className="text-sm text-slate-500">
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <div className="max-w-[1000px] mx-auto w-full px-4 py-4 sm:py-8 flex-1 flex flex-col">
+                <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col flex-1 sm:flex-none">
+                    <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3 min-w-0">
+                            {logoUrl && <img src={logoUrl} className="h-8 w-8 sm:h-10 sm:w-10 object-contain rounded-lg shrink-0" alt="" />}
+                            <div className="min-w-0">
+                                <h1 className="text-sm sm:text-lg font-bold text-slate-900 truncate">{contract.propertyTitle}</h1>
+                                <p className="text-xs sm:text-sm text-slate-500 truncate">
                                     {contract.type === 'rent' ? 'Locação' : 'Compra e Venda'} · {contract.clientName}
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                             {contract.signatureStatus === 'signed' ? (
-                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold">
-                                    <span className="material-symbols-outlined text-[18px]">verified</span> Assinado
+                                <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] sm:text-sm font-bold whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm sm:text-[18px]">verified</span>
+                                    <span className="hidden xs:inline">Assinado</span>
                                 </span>
                             ) : (
-                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-sm font-bold">
-                                    <span className="material-symbols-outlined text-[18px]">pending</span> Pendente
+                                <span className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-amber-100 text-amber-700 rounded-full text-[10px] sm:text-sm font-bold whitespace-nowrap">
+                                    <span className="material-symbols-outlined text-sm sm:text-[18px]">pending</span>
+                                    <span className="hidden xs:inline">Pendente</span>
                                 </span>
                             )}
                         </div>
                     </div>
 
-                    <div className="p-6 lg:p-10">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10 custom-scrollbar">
                         <div className="prose prose-sm max-w-none text-justify leading-relaxed whitespace-pre-wrap font-serif text-slate-800">
                             {contract.customContent || 'Conteúdo do contrato não disponível.'}
                         </div>
 
-                        <div className="mt-12 pt-8 border-t border-slate-100">
-                            <p className="text-right mb-12 font-serif italic text-sm text-slate-600">
+                        <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-slate-100">
+                            <p className="text-right mb-8 sm:mb-12 font-serif italic text-xs sm:text-sm text-slate-600">
                                 São Paulo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}.
                             </p>
-                            <div className="grid grid-cols-2 gap-12">
+                            <div className="grid grid-cols-2 gap-6 sm:gap-12">
                                 <div className="text-center">
-                                    <div className="h-14 flex items-center justify-center mb-2">
+                                    <div className="h-10 sm:h-14 flex items-center justify-center mb-2">
                                         {agencyStampUrl ? (
-                                            <img src={agencyStampUrl} className="h-14 object-contain" alt="Rubrica" />
+                                            <img src={agencyStampUrl} className="h-10 sm:h-14 object-contain" alt="Rubrica" />
                                         ) : (
-                                            <span className="text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Assinatura Administradora]</span>
+                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Assinatura Administradora]</span>
                                         )}
                                     </div>
                                     <div className="border-t border-black w-full pt-1">
-                                        <p className="font-bold text-xs uppercase">{agencyStampName}</p>
-                                        <p className="text-[10px] text-slate-500">Representante Legal</p>
+                                        <p className="font-bold text-[10px] sm:text-xs uppercase">{agencyStampName}</p>
+                                        <p className="text-[8px] sm:text-[10px] text-slate-500">Representante Legal</p>
                                     </div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="h-14 flex flex-col items-center justify-center mb-2">
+                                    <div className="h-10 sm:h-14 flex flex-col items-center justify-center mb-2">
                                         {contract.signatureImage ? (
-                                            <img src={contract.signatureImage} className="h-14 object-contain" alt="Assinatura" />
+                                            <img src={contract.signatureImage} className="h-10 sm:h-14 object-contain" alt="Assinatura" />
                                         ) : (
-                                            <span className="text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Pendente Assinatura Cliente]</span>
+                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Pendente Assinatura Cliente]</span>
                                         )}
                                     </div>
                                     <div className="border-t border-black w-full pt-1">
-                                        <p className="font-bold text-xs uppercase">{contract.clientName}</p>
-                                        <p className="text-[10px] text-slate-500">Contratante</p>
+                                        <p className="font-bold text-[10px] sm:text-xs uppercase">{contract.clientName}</p>
+                                        <p className="text-[8px] sm:text-[10px] text-slate-500">Contratante</p>
                                     </div>
                                 </div>
                             </div>
@@ -190,31 +192,31 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                     </div>
                 </div>
 
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center sticky bottom-0 bg-slate-50 py-3 sm:py-0 sm:static">
                     {contract.signatureStatus !== 'signed' && (
                         <button
                             onClick={() => setIsSignatureModalOpen(true)}
                             disabled={signingUp}
-                            className="px-8 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base"
                         >
                             {signingUp ? (
-                                <><span className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Salvando...</>
+                                <><span className="size-4 sm:size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Salvando...</>
                             ) : (
-                                <><span className="material-symbols-outlined">draw</span> Assinar Contrato</>
+                                <><span className="material-symbols-outlined text-xl sm:text-2xl">draw</span> Assinar Contrato</>
                             )}
                         </button>
                     )}
                     <button
                         onClick={handleDownloadPDF}
-                        className="px-8 py-4 border-2 border-primary text-primary rounded-xl font-bold hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
+                        className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 border-2 border-primary text-primary rounded-xl font-bold hover:bg-primary/5 transition-all flex items-center justify-center gap-2 text-sm sm:text-base"
                     >
-                        <span className="material-symbols-outlined">download</span> Baixar PDF
+                        <span className="material-symbols-outlined text-xl sm:text-2xl">download</span> Baixar PDF
                     </button>
                 </div>
 
                 {contract.signatureStatus === 'signed' && (
-                    <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                        <p className="text-emerald-800 font-medium flex items-center justify-center gap-2">
+                    <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                        <p className="text-emerald-800 font-medium flex items-center justify-center gap-2 text-xs sm:text-sm">
                             <span className="material-symbols-outlined text-emerald-600">verified</span>
                             Contrato assinado digitalmente em {contract.signedAt ? new Date(contract.signedAt).toLocaleDateString('pt-BR') : 'data registrada'}.
                         </p>

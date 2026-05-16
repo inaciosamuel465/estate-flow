@@ -173,15 +173,16 @@ export const deleteUser = async (id: string): Promise<boolean> => {
     }
 };
 
-export const toggleFavorite = async (userId: string, propertyId: string | number): Promise<(string | number)[] | null> => {
+export const toggleFavorite = async (userId: string, propertyId: string | number): Promise<string[] | null> => {
     try {
         const user = await neon.getUserById(userId);
         if (!user) return null;
 
-        let currentFavorites = (user.favorites || []) as (string | number)[];
-        const newFavorites = currentFavorites.includes(propertyId)
-            ? currentFavorites.filter(id => id !== propertyId)
-            : [...currentFavorites, propertyId];
+        const pid = String(propertyId);
+        let currentFavorites = (user.favorites || []).map(f => String(f));
+        const newFavorites = currentFavorites.includes(pid)
+            ? currentFavorites.filter(id => id !== pid)
+            : [...currentFavorites, pid];
 
         await neon.upsertUser({ ...user, favorites: newFavorites });
         return newFavorites;

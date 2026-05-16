@@ -33,6 +33,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
     const myContracts = contracts.filter(c => c.clientId === user.id || c.ownerId === user.id);
 
+    const handleSignContract = async (contract: Contract) => {
+        if (onUpdateContract) {
+            await onUpdateContract(contract.id, { signatureStatus: 'signed', signedAt: new Date().toISOString() });
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 font-display">
 

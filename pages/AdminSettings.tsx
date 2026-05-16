@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { updateSetting } from '../src/services/dataService';
 import { useNotifications } from '../src/contexts/NotificationContext';
+import { useCompany } from '../src/contexts/CompanyContext';
 import type { User } from '../src/types';
 
 interface AdminSettingsProps {
@@ -11,6 +12,7 @@ interface AdminSettingsProps {
 
 const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users }) => {
     const { permissionStatus, requestPermission } = useNotifications();
+    const { company, companySettings, refreshCompany } = useCompany();
     const [testEmail, setTestEmail] = useState('');
     const [isTestingEmail, setIsTestingEmail] = useState(false);
     const [testPushMessage, setTestPushMessage] = useState('Este é um teste de notificação push do EstateFlow!');
@@ -65,6 +67,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             ];
         })(),
         appUrl: settings.appUrl || '',
+        heroVideoUrl: settings.heroVideoUrl || '',
         socialInstagram: settings.socialInstagram || '',
         socialFacebook: settings.socialFacebook || '',
         socialWhatsapp: settings.socialWhatsapp || '',
@@ -72,11 +75,18 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         aiPromptBase: settings.aiPromptBase || 'Você é um assistente imobiliário de elite...',
         pixKey: settings.pixKey || '',
         pixBeneficiary: settings.pixBeneficiary || '',
+        smtp_host: companySettings?.smtp_host || '',
+        smtp_port: companySettings?.smtp_port || '587',
+        smtp_user: companySettings?.smtp_user || '',
+        smtp_password: companySettings?.smtp_password || '',
+        smtp_secure: companySettings?.smtp_secure ?? false,
+        email_sender_name: companySettings?.email_sender_name || '',
+        email_sender_address: companySettings?.email_sender_address || '',
     });
     
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
-    const [activeTab, setActiveTab] = useState<'branding' | 'contact' | 'contracts' | 'ai' | 'sync' | 'broadcast' | 'finance'>('branding');
+    const [activeTab, setActiveTab] = useState<'branding' | 'contact' | 'contracts' | 'ai' | 'sync' | 'broadcast' | 'finance' | 'smtp'>('branding');
     const [editingTemplateIndex, setEditingTemplateIndex] = useState<number | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,17 +95,19 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         if (!testEmail) return;
         setIsTestingEmail(true);
         try {
+            const companyId = localStorage.getItem('estateflow_company_id');
             const res = await fetch('/api/email/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    company_id: companyId,
                     to: testEmail,
                     subject: 'Teste de E-mail - EstateFlow Suite',
                     html: `<h1>Teste com sucesso!</h1><p>Se você recebeu este e-mail, as configurações de SMTP estão funcionando.</p>`
                 })
             });
             if (res.ok) alert('E-mail de teste enviado!');
-            else alert('Erro ao enviar e-mail. Verifique os logs do servidor e o .env.');
+            else alert('Erro ao enviar e-mail. Verifique as configurações SMTP.');
         } catch (e) {
             alert('Erro de conexão ao enviar e-mail.');
         } finally {
@@ -215,7 +227,36 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         setSaveMessage('');
         
         try {
-            // Save all settings to database
+            const companyId = localStorage.getItem('estateflow_company_id');
+
+            // Save SMTP settings to company_settings table
+            if (companyId) {
+                const { neon } = await import('@neondatabase/serverless');
+                const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+                await sql`
+                    INSERT INTO company_settings (company_id, company_name, smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure, email_sender_name, email_sender_address, logo_url, primary_color, secondary_color, whatsapp, instagram, facebook, website, updated_at)
+                    VALUES (${companyId}, ${localSettings.companyName}, ${localSettings.smtp_host || null}, ${localSettings.smtp_port ? Number(localSettings.smtp_port) : null}, ${localSettings.smtp_user || null}, ${localSettings.smtp_password || null}, ${!!localSettings.smtp_secure}, ${localSettings.email_sender_name || null}, ${localSettings.email_sender_address || null}, ${localSettings.logoUrl || null}, ${localSettings.primaryColor || null}, ${null}, ${localSettings.socialWhatsapp || null}, ${localSettings.socialInstagram || null}, ${localSettings.socialFacebook || null}, ${null}, NOW())
+                    ON CONFLICT (company_id) DO UPDATE SET
+                        company_name = EXCLUDED.company_name,
+                        smtp_host = EXCLUDED.smtp_host,
+                        smtp_port = EXCLUDED.smtp_port,
+                        smtp_user = EXCLUDED.smtp_user,
+                        smtp_password = EXCLUDED.smtp_password,
+                        smtp_secure = EXCLUDED.smtp_secure,
+                        email_sender_name = EXCLUDED.email_sender_name,
+                        email_sender_address = EXCLUDED.email_sender_address,
+                        logo_url = EXCLUDED.logo_url,
+                        primary_color = EXCLUDED.primary_color,
+                        whatsapp = EXCLUDED.whatsapp,
+                        instagram = EXCLUDED.instagram,
+                        facebook = EXCLUDED.facebook,
+                        updated_at = NOW()
+                `;
+                // Refresh company context to reflect changes immediately
+                if (refreshCompany) refreshCompany();
+            }
+
+            // Save all settings to system_settings
             const keys = Object.keys(localSettings);
             for (const key of keys) {
                 const value = key === 'contractTemplates' ? JSON.stringify(localSettings[key]) : localSettings[key];
@@ -242,6 +283,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         { id: 'finance', label: 'Financeiro (PIX)', icon: 'payments' },
         { id: 'broadcast', label: 'Anúncios / Push', icon: 'campaign' },
         { id: 'sync', label: 'App & Notificações', icon: 'notifications_active' },
+        { id: 'smtp', label: 'E-mail SMTP', icon: 'mail' },
     ];
 
     return (
@@ -469,6 +511,18 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 placeholder={import.meta.env.VITE_APP_URL || 'https://meusite.com.br'}
                                             />
                                             <p className="text-xs text-slate-400">Usado nos e-mails de assinatura de contrato. Se vazio, usa <code className="bg-slate-100 px-1 rounded">{import.meta.env.VITE_APP_URL || 'window.location.origin'}</code></p>
+                                        </div>
+                                        <div className="space-y-4 md:col-span-2">
+                                            <label className="block text-sm font-bold text-slate-700">Vídeo do Hero (YouTube ou Google Drive)</label>
+                                            <input 
+                                                type="text" 
+                                                name="heroVideoUrl"
+                                                value={localSettings.heroVideoUrl}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="https://www.youtube.com/watch?v=UBdgfwoZpNE"
+                                            />
+                                            <p className="text-xs text-slate-400">Link do YouTube ou Google Drive para o fundo do hero na página inicial. Formatos aceitos: youtube.com/watch?v=, youtu.be/, youtube.com/embed/, drive.google.com/file/d/. Deixe vazio para usar o padrão.</p>
                                         </div>
                                     </div>
 
@@ -866,6 +920,95 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                             )}
                                             {isBroadcasting ? 'Enviando...' : 'Disparar para Todos'}
                                         </button>
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+
+                        {activeTab === 'smtp' && (
+                            <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                                            <span className="material-symbols-outlined text-amber-500 text-3xl">mail</span>
+                                            Configurações de E-mail (SMTP)
+                                        </h2>
+                                        <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-amber-100">
+                                            Por Imobiliária
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-500 text-sm">
+                                        Configure o servidor SMTP da sua imobiliária. 
+                                        Os e-mails serão enviados usando estas credenciais.
+                                        {companySettings?.smtp_host && <span className="text-emerald-600 font-bold"> ✅ SMTP configurado</span>}
+                                        {!companySettings?.smtp_host && <span className="text-amber-600 font-bold"> ⚠️ Usando SMTP global (ENV)</span>}
+                                    </p>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Servidor SMTP *</label>
+                                            <input value={localSettings.smtp_host} onChange={e => setLocalSettings(p => ({ ...p, smtp_host: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                placeholder="smtp.gmail.com" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Porta</label>
+                                            <input value={localSettings.smtp_port} onChange={e => setLocalSettings(p => ({ ...p, smtp_port: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                placeholder="587" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Usuário SMTP *</label>
+                                            <input value={localSettings.smtp_user} onChange={e => setLocalSettings(p => ({ ...p, smtp_user: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                placeholder="contato@imobiliaria.com" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Senha SMTP *</label>
+                                            <input type="password" value={localSettings.smtp_password} onChange={e => setLocalSettings(p => ({ ...p, smtp_password: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                placeholder="••••••••" />
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" checked={!!localSettings.smtp_secure} onChange={e => setLocalSettings(p => ({ ...p, smtp_secure: e.target.checked }))}
+                                                    className="sr-only peer" />
+                                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                            </label>
+                                            <span className="text-sm text-slate-600 font-medium">Conexão Segura (TLS/SSL)</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-slate-100 pt-6">
+                                        <h3 className="text-lg font-bold text-slate-800 mb-4">Remetente dos E-mails</h3>
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome do Remetente</label>
+                                                <input value={localSettings.email_sender_name} onChange={e => setLocalSettings(p => ({ ...p, email_sender_name: e.target.value }))}
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                    placeholder="Imobiliária Alpha" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">E-mail do Remetente</label>
+                                                <input value={localSettings.email_sender_address} onChange={e => setLocalSettings(p => ({ ...p, email_sender_address: e.target.value }))}
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                    placeholder="contato@imobiliaria.com" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-slate-100 pt-6">
+                                        <h3 className="text-lg font-bold text-slate-800 mb-4">Testar Envio</h3>
+                                        <p className="text-sm text-slate-500 mb-4">Envie um e-mail de teste para verificar se as configurações SMTP estão corretas.</p>
+                                        <div className="flex items-center gap-3">
+                                            <input value={testEmail} onChange={e => setTestEmail(e.target.value)}
+                                                className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                placeholder="seu@email.com" />
+                                            <button onClick={handleTestEmail} disabled={isTestingEmail || !testEmail}
+                                                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all flex items-center gap-2">
+                                                {isTestingEmail ? <span className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Testar'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </section>

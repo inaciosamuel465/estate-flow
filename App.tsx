@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCompany } from './src/contexts/CompanyContext';
+import MasterApp from './MasterApp';
 
 // Admin Components
 import AdminDashboard from './pages/AdminDashboard';
@@ -19,6 +21,9 @@ import AdminSettings from './pages/AdminSettings';
 import NotificationCenter from './components/NotificationCenter';
 import WhatsAppButton from './components/WhatsAppButton';
 import PublicContractSign from './pages/PublicContractSign';
+import SubscriptionPlans from './pages/SubscriptionPlans';
+import PaymentResult from './pages/PaymentResult';
+import SaasHome from './pages/SaasHome';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { NotificationProvider } from './src/contexts/NotificationContext';
 
@@ -58,8 +63,6 @@ import {
 import {
   createContractNotification,
   createPropertyNotification,
-  registerServiceWorker,
-  requestNotificationPermission
 } from './src/services/notificationHelpers';
 import ReactPlayer from 'react-player';
 
@@ -75,6 +78,8 @@ const PublicLayout = ({ children }: { children?: React.ReactNode }) => (
 );
 
 const App: React.FC = () => {
+  const { company, companySettings, refreshCompany } = useCompany();
+
   // --- AI States ---
   const [isAIThinking, setIsAIThinking] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
@@ -142,14 +147,23 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // --- Dynamic Branding Injection ---
+  // --- Dynamic Branding Injection (Company-aware) ---
   useEffect(() => {
-    if (settings.primaryColor) {
-      document.documentElement.style.setProperty('--color-primary', settings.primaryColor);
-    } else {
-      document.documentElement.style.setProperty('--color-primary', '#4f46e5'); // Fallback indigo
+    const primaryColor = companySettings?.primary_color || settings.primaryColor || '#4f46e5';
+    const secondaryColor = companySettings?.secondary_color || '#1e40af';
+    document.documentElement.style.setProperty('--color-primary', primaryColor);
+    document.documentElement.style.setProperty('--color-secondary', secondaryColor);
+
+    if (companySettings?.favicon_url) {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = companySettings.favicon_url;
     }
-  }, [settings.primaryColor]);
+  }, [settings.primaryColor, companySettings]);
 
   // --- Notifications State ---
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -158,13 +172,26 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Extract slug from URL path (e.g., /estate1/admin/dashboard -> slug=estate1)
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  const firstSegment = pathParts[0] || null;
+  const SYSTEM_PATHS = ['master', 'plans', 'login', 'advertise', 'contrato', 'payment'];
+
+  const isSystemRoute = !firstSegment || firstSegment === '' || SYSTEM_PATHS.includes(firstSegment) || firstSegment.startsWith('Estate');
+  const routeSlug = isSystemRoute ? null : firstSegment;
+  const subpath = routeSlug ? '/' + pathParts.slice(1).join('/') : location.pathname;
+
   const currentView = React.useMemo(() => {
-    const p = location.pathname;
+    const p = subpath;
     if (p.startsWith('/Estate/')) return 'details';
     if (p.startsWith('/admin/details/')) return 'admin-details';
     if (p === '/login') return 'login';
     if (p === '/advertise') return 'advertise';
     if (p === '/dashboard') return 'user-dashboard';
+    if (p === '/payment/success') return 'payment-success';
+    if (p === '/payment/failure') return 'payment-failure';
+    if (p === '/payment/pending') return 'payment-pending';
+    if (p.startsWith('/plans')) return 'plans';
     if (p.startsWith('/contrato/')) return 'public-contract';
     if (p.startsWith('/admin')) {
       if (p === '/admin/dashboard') return 'dashboard';
@@ -184,43 +211,53 @@ const App: React.FC = () => {
       if (p === '/admin/users') return 'users';
       return 'dashboard';
     }
+    // If at root with no slug, show SaasHome
+    if (p === '/' || p === '') return 'saas-home';
+    // If at root with slug (e.g., /estate1), show agency home
+    if (routeSlug && (p === '/' || p === '')) return 'home';
     return 'home';
-  }, [location.pathname]);
+  }, [subpath, routeSlug]);
 
   const selectedPropertyId = React.useMemo(() => {
-    const p = location.pathname;
+    const p = subpath;
     if (p.startsWith('/Estate/')) return p.split('/')[2];
     if (p.startsWith('/admin/details/')) return p.split('/')[3];
     return null;
-  }, [location.pathname]);
+  }, [subpath]);
 
   const selectedContractId = React.useMemo(() => {
-    const p = location.pathname;
+    const p = subpath;
     if (p.startsWith('/contrato/')) return p.split('/')[2];
     return null;
-  }, [location.pathname]);
+  }, [subpath]);
 
-  const setCurrentView = (view: string) => {
+  const setCurrentView = (view: string, customSlug?: string) => {
+    const s = customSlug || routeSlug;
+    const pref = s ? `/${s}` : '';
     const viewMap: Record<string, string> = {
-      'dashboard': '/admin/dashboard',
-      'all-listings': '/admin/listings',
-      'listing': '/admin/listing/new',
-      'edit-listing': '/admin/listing/edit',
-      'financial': '/admin/financial',
-      'contracts': '/admin/contracts',
-      'marketing': '/admin/marketing',
-      'map': '/admin/map',
-      'crm': '/admin/crm',
-      'ai': '/admin/ai',
-      'ai-analytics': '/admin/ai-analytics',
-      'analytics': '/admin/analytics',
-      'profile-settings': '/admin/profile-settings',
-      'settings': '/admin/settings',
-      'users': '/admin/users',
-      'home': '/',
+      'dashboard': `${pref}/admin/dashboard`,
+      'all-listings': `${pref}/admin/listings`,
+      'listing': `${pref}/admin/listing/new`,
+      'edit-listing': `${pref}/admin/listing/edit`,
+      'financial': `${pref}/admin/financial`,
+      'contracts': `${pref}/admin/contracts`,
+      'marketing': `${pref}/admin/marketing`,
+      'map': `${pref}/admin/map`,
+      'crm': `${pref}/admin/crm`,
+      'ai': `${pref}/admin/ai`,
+      'ai-analytics': `${pref}/admin/ai-analytics`,
+      'analytics': `${pref}/admin/analytics`,
+      'profile-settings': `${pref}/admin/profile-settings`,
+      'settings': `${pref}/admin/settings`,
+      'users': `${pref}/admin/users`,
+      'home': s ? `/${s}` : '/',
       'login': '/login',
       'advertise': '/advertise',
-      'user-dashboard': '/dashboard',
+      'user-dashboard': s ? `/${s}/dashboard` : '/dashboard',
+      'plans': '/plans',
+      'payment-success': '/payment/success',
+      'payment-failure': '/payment/failure',
+      'payment-pending': '/payment/pending',
     };
     if (viewMap[view]) {
       navigate(viewMap[view]);
@@ -345,18 +382,36 @@ const App: React.FC = () => {
 
   // --- Handlers de Autenticação ---
 
-  const handleLogin = (user: User) => {
+  const handleLogin = async (user: User) => {
     setCurrentUser(user);
-    if (user.role === 'admin') {
-      setCurrentView('dashboard');
-    } else {
-      setCurrentView('home');
+    // Try to get slug from stored company data
+    const storedData = localStorage.getItem('estateflow_company_data');
+    if (storedData) {
+      try {
+        const c = JSON.parse(storedData);
+        if (c.slug) {
+          setCurrentView('dashboard', c.slug);
+          return;
+        }
+      } catch {}
     }
+    // Fallback: navigate to admin dashboard (will work after company context loads)
+    await refreshCompany();
   };
 
-  const handleRegister = (user: User) => {
+  const handleRegister = async (user: User) => {
     setCurrentUser(user);
-    setCurrentView('home');
+    const storedData = localStorage.getItem('estateflow_company_data');
+    if (storedData) {
+      try {
+        const c = JSON.parse(storedData);
+        if (c.slug) {
+          setCurrentView('home', c.slug);
+          return;
+        }
+      } catch {}
+    }
+    await refreshCompany();
   };
 
   const handleLogout = async () => {
@@ -386,10 +441,12 @@ const App: React.FC = () => {
     try {
       const siteUrl = 'https://estate-flow-amber.vercel.app';
       const loginUrl = `${siteUrl}/login`;
+      const companyId = company?.id || localStorage.getItem('estateflow_company_id');
       const res = await fetch('/api/email/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          company_id: companyId,
           to: user.email,
           subject: `Bem-vindo ao EstateFlow - Suas Credenciais de Acesso`,
           html: `
@@ -516,6 +573,11 @@ const App: React.FC = () => {
         </button>
       </div>
     );
+  }
+
+  // Master Admin (rota /master)
+  if (location.pathname.startsWith('/master')) {
+    return <MasterApp />;
   }
 
   // 1. Visão de Admin (Logado e role='admin')
@@ -704,12 +766,23 @@ const App: React.FC = () => {
                     <button onClick={() => { setCurrentView('profile-settings'); setIsMobileMenuOpen(false); }} className="text-xs text-primary font-bold">Ver Perfil</button>
                   </div>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="size-10 flex items-center justify-center text-rose-500 bg-rose-50 dark:bg-rose-500/10 rounded-xl"
-                >
-                  <span className="material-symbols-outlined">logout</span>
-                </button>
+                <div className="flex gap-2">
+                  {routeSlug && (
+                    <button
+                      onClick={() => { setCurrentView('home'); setIsMobileMenuOpen(false); }}
+                      className="size-10 flex items-center justify-center text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl"
+                      title="Ver Site"
+                    >
+                      <span className="material-symbols-outlined">open_in_new</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="size-10 flex items-center justify-center text-rose-500 bg-rose-50 dark:bg-rose-500/10 rounded-xl"
+                  >
+                    <span className="material-symbols-outlined">logout</span>
+                  </button>
+                </div>
               </div>
             </div>
             {/* Click outside to close */}
@@ -751,13 +824,28 @@ const App: React.FC = () => {
             <NavButton active={currentView === 'profile-settings'} onClick={() => setCurrentView('profile-settings')} icon="person" tooltip="Configurações da Conta" />
           </div>
 
-          <div className="mt-auto w-full px-2">
+          <div className="mt-auto w-full px-2 flex flex-col gap-1">
+            {routeSlug && (
+              <button
+                onClick={() => { setCurrentView('home'); }}
+                className="group relative flex items-center justify-center w-full aspect-square rounded-xl transition-all text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+                title="Ver Site"
+              >
+                <span className="material-symbols-outlined notranslate text-[24px]">open_in_new</span>
+                <span className="absolute left-full ml-4 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                  Ver Site
+                </span>
+              </button>
+            )}
             <button
               onClick={handleLogout}
-              className="group relative flex items-center justify-center w-full aspect-square rounded-xl transition-all text-slate-500 hover:bg-rose-50 hover:text-rose-500"
+              className="group relative flex items-center justify-center w-full aspect-square rounded-xl transition-all text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-500"
               title="Sair do Sistema"
             >
               <span className="material-symbols-outlined notranslate text-[24px]">logout</span>
+              <span className="absolute left-full ml-4 px-2 py-1 bg-slate-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                Sair
+              </span>
             </button>
           </div>
         </div>
@@ -772,7 +860,12 @@ const App: React.FC = () => {
     );
   }
 
-  // 2. Visão Pública / Cliente / Proprietário
+  // 2. SaaS Landing Page
+  if (currentView === 'saas-home') {
+    return <SaasHome />;
+  }
+
+  // 3. Visão Pública / Cliente / Proprietário
 
   if (currentView === 'login') {
     return (
@@ -787,6 +880,7 @@ const App: React.FC = () => {
             onLoginSuccess={handleLogin}
             onRegisterSuccess={handleRegister}
             onCancel={() => setCurrentView('home')}
+            companyId={company?.id || ''}
           />
         </PublicLayout>
       </NotificationProvider>
@@ -880,6 +974,32 @@ const App: React.FC = () => {
   // 3. Public Contract View for Signing
   if (currentView === 'public-contract' && selectedContractId) {
     return <PublicContractSign contractId={selectedContractId} settings={settings} />;
+  }
+
+  // 4. Subscription Plans
+  if (currentView === 'plans') {
+    return (
+      <SubscriptionPlans
+        companyId={currentUser ? (company?.id || '') : ''}
+        currentPlan={currentUser ? company?.plan : undefined}
+        currentStatus={currentUser ? company?.subscription_status : undefined}
+        isLoggedIn={!!currentUser}
+        onBack={() => setCurrentView('home')}
+      />
+    );
+  }
+
+  // 5. Payment result pages
+  if (currentView === 'payment-success') {
+    return <PaymentResult status="success" onGoHome={() => setCurrentView('home')} />;
+  }
+
+  if (currentView === 'payment-failure') {
+    return <PaymentResult status="failure" onGoHome={() => setCurrentView('home')} onRetry={() => setCurrentView('plans')} />;
+  }
+
+  if (currentView === 'payment-pending') {
+    return <PaymentResult status="pending" onGoHome={() => setCurrentView('home')} />;
   }
 
   // Default: Home Page

@@ -45,6 +45,27 @@ const ClientHome: React.FC<ClientHomeProps> = ({
         purpose: 'any' // 'sale', 'rent' or 'any'
     });
 
+    // --- Hero Video (YouTube ou Google Drive) ---
+    const heroVideo = (() => {
+        const url = settings.heroVideoUrl;
+        if (!url) return { type: 'youtube', id: 'UBdgfwoZpNE' } as const;
+
+        const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+        if (youtubeMatch) return { type: 'youtube', id: youtubeMatch[1] } as const;
+
+        const youtubeDirectMatch = url.match(/^([a-zA-Z0-9_-]{11})$/);
+        if (youtubeDirectMatch) return { type: 'youtube', id: youtubeDirectMatch[1] } as const;
+
+        const driveMatch = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
+        if (driveMatch) return { type: 'drive', id: driveMatch[1] } as const;
+
+        return { type: 'youtube', id: 'UBdgfwoZpNE' } as const;
+    })();
+
+    const embedSrc = heroVideo.type === 'youtube'
+        ? `https://www.youtube.com/embed/${heroVideo.id}?autoplay=1&mute=1&loop=1&controls=0&playlist=${heroVideo.id}&playsinline=1&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0&cc_load_policy=0`
+        : `https://drive.google.com/file/d/${heroVideo.id}/preview?autoplay=1`;
+
     // --- Music State ---
     const [isMusicPlaying, setIsMusicPlaying] = useState(false);
     const [hasInteracted, setHasInteracted] = useState(false);
@@ -193,18 +214,18 @@ const ClientHome: React.FC<ClientHomeProps> = ({
             <main className="flex-1">
 
                 {/* --- HERO SECTION LUXO --- */}
-                <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300vw] h-[300vh] md:w-[150vw] md:h-[150vh] opacity-80 pointer-events-none">
+                <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900">
+                    <div className="absolute inset-0 overflow-hidden">
+                        <div className={`absolute ${heroVideo.type === 'drive' ? 'top-[-90px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+180px)]' : 'top-[-50px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+100px)]'} opacity-80`}>
                             <iframe
-                                src="https://www.youtube.com/embed/UBdgfwoZpNE?autoplay=1&mute=1&loop=1&controls=0&playlist=UBdgfwoZpNE&playsinline=1&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3"
+                                src={embedSrc}
                                 className="w-full h-full"
                                 style={{ border: 'none', pointerEvents: 'none' }}
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allow={heroVideo.type === 'youtube' ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" : "autoplay"}
                                 title="Hero background video"
                             />
                         </div>
-                        {/* Overlay invisível para bloquear qualquer toque no vídeo em celulares */}
-                        <div className="absolute inset-0 z-20 w-full h-full bg-transparent" style={{ touchAction: 'none' }}></div>
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#F8F9FC] via-slate-900/40 to-black/40 z-10"></div>
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 z-10 mix-blend-overlay"></div>
 

@@ -9,7 +9,7 @@ interface InteractiveMapProps {
 
 const InteractiveMap: React.FC<InteractiveMapProps> = ({ onSelectProperty, properties = [] }) => {
   // --- Estados de Controle ---
-  const [activePropertyId, setActivePropertyId] = useState<number | null>(null);
+  const [activePropertyId, setActivePropertyId] = useState<string | number | null>(null);
   const [mapMode, setMapMode] = useState<'simulated' | 'real'>('simulated');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -169,8 +169,8 @@ const InteractiveMap: React.FC<InteractiveMapProps> = ({ onSelectProperty, prope
                             </div>
                             <p className="text-slate-500 text-xs truncate">{property.address}</p>
                             <div className="flex items-center gap-2 mt-2 text-slate-500 text-[10px]">
-                                <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">bed</span> {property.bedrooms}</span>
-                                <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">bathtub</span> {property.bathrooms}</span>
+                                <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">bed</span> {property.beds}</span>
+                                <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">bathtub</span> {property.baths}</span>
                                 <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-[12px]">square_foot</span> {property.area}m²</span>
                             </div>
                         </div>

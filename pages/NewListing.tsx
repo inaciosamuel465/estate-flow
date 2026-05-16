@@ -503,7 +503,7 @@ const NewListing: React.FC<NewListingProps> = ({ onPublish, currentUser, initial
           lng: Number(formData.lng) || 0,
           type: formData.propertyType,
           purpose: formData.transactionType === 'aluguel' ? 'rent' : 'sale',
-          ownerId: currentUser?.id || (initialData ? initialData.ownerId : 1),
+          ownerId: Number(currentUser?.id) || (initialData ? Number(initialData.ownerId) : 1),
           status: formData.status as 'active' | 'sold' | 'rented' | 'draft',
           stats: initialData ? initialData.stats : { views: 0, likes: 0, leads: 0 },
 

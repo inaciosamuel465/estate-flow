@@ -55,7 +55,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
     const propertyTypeData = useMemo(() => {
         const types: Record<string, number> = {};
         properties.forEach(p => {
-            const cat = p.category || 'Outros';
+            const cat = p.type || 'Outros';
             types[cat] = (types[cat] || 0) + 1;
         });
         return Object.entries(types).map(([name, value]) => ({ name, value }));
@@ -67,8 +67,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
         properties.forEach(p => {
             const neighborhood = p.location?.split('-')[0]?.trim() || 'Desconhecido';
             const price = parsePrice(p.price);
-            const sqm = p.specs?.find(s => s.icon === 'square_foot')?.value || '100';
-            const sqmNum = parseFloat(sqm.replace(/[^\d]/g, '')) || 100;
+            const sqmNum = p.area || 100;
             const priceSqm = price / sqmNum;
             
             if (!areas[neighborhood]) areas[neighborhood] = { total: 0, count: 0 };

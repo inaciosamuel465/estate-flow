@@ -21,6 +21,12 @@ interface AlertItem {
   time: string;
 }
 
+interface SubInfo {
+  status: string;
+  plan: string;
+  current_period_end: string;
+}
+
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigate,
   properties = [],
@@ -35,6 +41,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [isBoosting, setIsBoosting] = useState(false);
   const [boostSuccess, setBoostSuccess] = useState(false);
+  const [subInfo, setSubInfo] = useState<SubInfo | null>(null);
 
   // Load real DB stats and AI insights
   useEffect(() => {
@@ -44,6 +51,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     getDashboardStats().then(setDbStats).catch(() => {});
     getActivityLog(10).then(setActivityLog).catch(() => {});
     getLeads().then(setAllLeads).catch(() => {});
+    (async () => {
+      try {
+        const companyId = localStorage.getItem('estateflow_company_id');
+        if (companyId) {
+          const token = localStorage.getItem('ef_token');
+          const res = await fetch(`/api/subscriptions/status?company_id=${companyId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.subscription) setSubInfo(data.subscription);
+          }
+        }
+      } catch {}
+    })();
 
     if (properties.length > 0) {
       setIsLoadingAI(true);
@@ -162,6 +184,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Subscription Status Widget */}
+          {subInfo && (
+            <div className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm ${
+              subInfo.status === 'active' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+              subInfo.status === 'trialing' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+              'bg-rose-50 border-rose-200 text-rose-700'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">
+                  {subInfo.status === 'active' ? 'verified' : subInfo.status === 'trialing' ? 'hourglass_top' : 'error'}
+                </span>
+                <span className="font-bold">Assinatura: <span className="capitalize">{subInfo.status === 'active' ? 'Ativa' : subInfo.status === 'trialing' ? 'Período de Teste' : subInfo.status}</span></span>
+              </div>
+              <span className="text-xs opacity-80">
+                {subInfo.current_period_end ? `Próxima cobrança: ${new Date(subInfo.current_period_end).toLocaleDateString('pt-BR')}` : ''}
+              </span>
+            </div>
+          )}
 
           {/* Quick Actions & Shortcuts Hint */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-[#1a1d23] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">

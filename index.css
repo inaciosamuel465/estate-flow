@@ -113,3 +113,45 @@ textarea {
 .stagger-2 { animation-delay: 0.2s; }
 .stagger-3 { animation-delay: 0.3s; }
 
+/* Device mockups */
+.perspective-3d {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.notebook-screen-content {
+  transform: rotateX(2deg);
+}
+
+.phone-float {
+  animation: phoneFloat 5s ease-in-out infinite;
+}
+
+@keyframes phoneFloat {
+  0%, 100% { transform: translateY(-25px) translateX(10px); }
+  50% { transform: translateY(-38px) translateX(10px); }
+}
+
+.step-line {
+  position: absolute;
+  top: 28px;
+  left: calc(12.5% + 28px);
+  width: calc(75% - 56px);
+  height: 2px;
+  background: linear-gradient(to right, #e2e8f0, #2b6cee, #2b6cee, #e2e8f0);
+}
+
+.bar-gradient {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+}
+
+@media (max-width: 768px) {
+  .phone-float {
+    animation: none;
+    transform: translateY(0) translateX(0);
+  }
+  .step-line {
+    display: none;
+  }
+}
+
