@@ -1,13 +1,12 @@
 {
     "framework": "vite",
     "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
-        },
-        {
-            "source": "/(.*)",
-            "destination": "/index.html"
-        }
+        { "source": "/api/agency/(.*)", "destination": "/api/agency" },
+        { "source": "/api/push/(.*)", "destination": "/api/push" },
+        { "source": "/api/subscriptions/(.*)", "destination": "/api/subscriptions" },
+        { "source": "/api/master/(.*)", "destination": "/api/master" },
+        { "source": "/api/upload/serve", "destination": "/api/upload" },
+        { "source": "/api/(.*)", "destination": "/api/$1" },
+        { "source": "/(.*)", "destination": "/index.html" }
     ]
 }

@@ -522,7 +522,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
                                                 placeholder="https://www.youtube.com/watch?v=UBdgfwoZpNE"
                                             />
-                                            <p className="text-xs text-slate-400">Link do YouTube ou Google Drive para o fundo do hero na página inicial. Formatos aceitos: youtube.com/watch?v=, youtu.be/, youtube.com/embed/, drive.google.com/file/d/. Deixe vazio para usar o padrão.</p>
+                                            <p className="text-xs text-slate-400">Link do YouTube para o fundo do hero na página inicial. Formatos aceitos: youtube.com/watch?v=, youtu.be/, youtube.com/embed/. Deixe vazio para usar o padrão.</p>
                                         </div>
                                     </div>
 

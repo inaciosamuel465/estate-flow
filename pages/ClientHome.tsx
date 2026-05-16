@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { User, Property } from '../src/types';
 import ReactPlayer from 'react-player';
 
@@ -62,9 +62,22 @@ const ClientHome: React.FC<ClientHomeProps> = ({
         return { type: 'youtube', id: 'UBdgfwoZpNE' } as const;
     })();
 
+    const [driveVideoSrc, setDriveVideoSrc] = useState('');
+    const [driveVideoFailed, setDriveVideoFailed] = useState(false);
+
+    useEffect(() => {
+        if (heroVideo.type !== 'drive' || !heroVideo.id) return;
+        const proxyUrl = `/api/video-proxy?id=${heroVideo.id}`;
+        const directUrl = `https://drive.google.com/uc?export=download&confirm=t&id=${heroVideo.id}`;
+        fetch(proxyUrl, { method: 'HEAD' }).then(r => {
+            if (r.ok) setDriveVideoSrc(proxyUrl);
+            else setDriveVideoSrc(directUrl);
+        }).catch(() => setDriveVideoSrc(directUrl));
+    }, [heroVideo.id, heroVideo.type]);
+
     const embedSrc = heroVideo.type === 'youtube'
         ? `https://www.youtube.com/embed/${heroVideo.id}?autoplay=1&mute=1&loop=1&controls=0&playlist=${heroVideo.id}&playsinline=1&rel=0&modestbranding=1&disablekb=1&iv_load_policy=3&fs=0&cc_load_policy=0`
-        : `https://drive.google.com/file/d/${heroVideo.id}/preview?autoplay=1`;
+        : '';
 
     // --- Music State ---
     const [isMusicPlaying, setIsMusicPlaying] = useState(false);
@@ -217,13 +230,30 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                 <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900">
                     <div className="absolute inset-0 overflow-hidden">
                         <div className={`absolute ${heroVideo.type === 'drive' ? 'top-[-90px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+180px)]' : 'top-[-50px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+100px)]'} opacity-80`}>
-                            <iframe
-                                src={embedSrc}
-                                className="w-full h-full"
-                                style={{ border: 'none', pointerEvents: 'none' }}
-                                allow={heroVideo.type === 'youtube' ? "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" : "autoplay"}
-                                title="Hero background video"
-                            />
+                            {heroVideo.type === 'youtube' ? (
+                                <iframe
+                                    src={embedSrc}
+                                    className="w-full h-full"
+                                    style={{ border: 'none', pointerEvents: 'none' }}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    title="Hero background video"
+                                />
+                            ) : (
+                                <video
+                                    key={driveVideoSrc}
+                                    src={driveVideoSrc}
+                                    className="w-full h-full object-cover"
+                                    autoPlay
+                                    muted
+                                    loop
+                                    playsInline
+                                    style={{ pointerEvents: 'none' }}
+                                    onError={() => setDriveVideoFailed(true)}
+                                />
+                            )}
+                            {driveVideoFailed && (
+                                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+                            )}
                         </div>
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-[#F8F9FC] via-slate-900/40 to-black/40 z-10"></div>

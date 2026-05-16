@@ -18,6 +18,24 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
+      chunkSizeWarningLimit: 2000,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            const match = id.match(/node_modules[\\/](?:@[^\\/]+[\\/])?[^\\/]+/);
+            if (!match) return 'vendor';
+            const pkg = match[0].toLowerCase();
+            if (/react|scheduler/.test(pkg)) return 'react-vendor';
+            if (/html2canvas/.test(pkg)) return 'html2canvas';
+            if (/leaflet/.test(pkg)) return 'map-vendor';
+            if (/hls\.js/.test(pkg)) return 'hls-vendor';
+            if (/dash/.test(pkg)) return 'dash-vendor';
+            if (/react-player/.test(pkg)) return 'player-vendor';
+            return 'vendor';
+          }
+        }
+      }
     },
     plugins: [
       react(), 
