@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { GoogleGenAI } from "@google/genai";
 
 const ImageStudio: React.FC = () => {
   // --- Estados de Controle e UI ---
@@ -47,45 +46,12 @@ const ImageStudio: React.FC = () => {
     setActiveTab('ai');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
-      // 1. Construção do Prompt Otimizado para Imóveis
-      const prompt = `Professional architectural photography of a ${config.roomType}. 
-                      Interior Design Style: ${config.style}. 
-                      Materials: ${config.materials}. 
-                      Color Palette: ${config.colors}. 
-                      Lighting: ${config.lighting}. 
-                      High resolution, photorealistic, 8k, architectural digest magazine quality, wide angle lens.`;
-
-      if (!apiKey) {
-        console.warn("API Key não encontrada. Usando modo simulação.");
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        // Simulação visual para demonstração sem API Key
-        const randomSeed = Math.floor(Math.random() * 1000);
-        setGeneratedImage(`https://picsum.photos/1200/800?random=${randomSeed}`);
-      } else {
-        const ai = new GoogleGenAI({ apiKey });
-        
-        // Se quiséssemos usar a imagem de base como input (multimodal), adicionaríamos aqui.
-        // Por simplicidade e robustez neste exemplo, estamos gerando Text-to-Image focado no prompt.
-        
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: prompt }] },
-        });
-
-        if (response.candidates?.[0]?.content?.parts) {
-          for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-              setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
-              break;
-            }
-          }
-        }
-      }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const randomSeed = Math.floor(Math.random() * 1000);
+      setGeneratedImage(`https://picsum.photos/1200/800?random=${randomSeed}`);
     } catch (error) {
       console.error("Erro ao gerar imagem:", error);
-      alert("Erro na conexão com a IA. Tente novamente.");
+      alert("Erro ao gerar imagem. Tente novamente.");
     } finally {
       setIsGenerating(false);
     }

@@ -1,22 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { updateSetting } from '../src/services/dataService';
 import { useNotifications } from '../src/contexts/NotificationContext';
+import type { User } from '../src/types';
 
 interface AdminSettingsProps {
     settings: Record<string, string>;
     onSettingsUpdated: (newSettings: Record<string, string>) => void;
+    users?: User[];
 }
 
-const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated }) => {
+const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users }) => {
     const { permissionStatus, requestPermission } = useNotifications();
     const [testEmail, setTestEmail] = useState('');
     const [isTestingEmail, setIsTestingEmail] = useState(false);
     const [testPushMessage, setTestPushMessage] = useState('Este é um teste de notificação push do EstateFlow!');
     const [isTestingPush, setIsTestingPush] = useState(false);
 
+    const adminUsers = useMemo(() => (users || []).filter(u => u.role === 'admin'), [users]);
+
     const [localSettings, setLocalSettings] = useState<Record<string, any>>({
         companyName: settings.companyName || 'Flowe Estate',
         logoUrl: settings.logoUrl || '',
+        agencyCnpj: settings.agencyCnpj || '',
+        agencyCreci: settings.agencyCreci || '',
+        agencyStampUrl: settings.agencyStampUrl || '',
+        agencyStampName: settings.agencyStampName || '',
         contactEmail: settings.contactEmail || '',
         contactPhone: settings.contactPhone || '',
         address: settings.address || '',
@@ -56,6 +64,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 }
             ];
         })(),
+        appUrl: settings.appUrl || '',
         socialInstagram: settings.socialInstagram || '',
         socialFacebook: settings.socialFacebook || '',
         socialWhatsapp: settings.socialWhatsapp || '',
@@ -226,8 +235,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
     };
 
     const tabs = [
-        { id: 'branding', label: 'Branding & Visual', icon: 'palette' },
-        { id: 'contact', label: 'Contato & Redes', icon: 'contact_support' },
+        { id: 'branding', label: 'Identidade Visual', icon: 'palette' },
+        { id: 'contact', label: 'Perfil da Imobiliária', icon: 'business' },
         { id: 'contracts', label: 'Contratos', icon: 'description' },
         { id: 'ai', label: 'Inteligência Artificial', icon: 'smart_toy' },
         { id: 'finance', label: 'Financeiro (PIX)', icon: 'payments' },
@@ -300,38 +309,24 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                         <span className="material-symbols-outlined text-indigo-500 text-3xl">palette</span>
                                         Identidade Visual
                                     </h2>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">Nome da Imobiliária</label>
+
+                                    <div className="space-y-4">
+                                        <label className="block text-sm font-bold text-slate-700">Cor Principal</label>
+                                        <div className="flex gap-4">
+                                            <input 
+                                                type="color" 
+                                                name="primaryColor"
+                                                value={localSettings.primaryColor}
+                                                onChange={handleChange}
+                                                className="w-16 h-14 p-1 rounded-xl cursor-pointer border border-slate-200"
+                                            />
                                             <input 
                                                 type="text" 
-                                                name="companyName"
-                                                value={localSettings.companyName}
+                                                name="primaryColor"
+                                                value={localSettings.primaryColor}
                                                 onChange={handleChange}
-                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all text-lg"
-                                                placeholder="Flowe Estate"
+                                                className="flex-1 px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none uppercase font-mono"
                                             />
-                                        </div>
-                                        
-                                        <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">Cor Principal (Brand Color)</label>
-                                            <div className="flex gap-4">
-                                                <input 
-                                                    type="color" 
-                                                    name="primaryColor"
-                                                    value={localSettings.primaryColor}
-                                                    onChange={handleChange}
-                                                    className="w-16 h-14 p-1 rounded-xl cursor-pointer border border-slate-200"
-                                                />
-                                                <input 
-                                                    type="text" 
-                                                    name="primaryColor"
-                                                    value={localSettings.primaryColor}
-                                                    onChange={handleChange}
-                                                    className="flex-1 px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none uppercase font-mono"
-                                                />
-                                            </div>
                                         </div>
                                     </div>
 
@@ -391,11 +386,45 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-                                        <span className="material-symbols-outlined text-emerald-500 text-3xl">contact_support</span>
-                                        Canais de Atendimento
+                                        <span className="material-symbols-outlined text-blue-600 text-3xl">business</span>
+                                        Perfil da Imobiliária
                                     </h2>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {/* Dados da Imobiliária */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-bold text-slate-700">Nome da Imobiliária</label>
+                                            <input 
+                                                type="text" 
+                                                name="companyName"
+                                                value={localSettings.companyName}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-lg"
+                                                placeholder="Flowe Estate"
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-bold text-slate-700">CNPJ</label>
+                                            <input 
+                                                type="text" 
+                                                name="agencyCnpj"
+                                                value={localSettings.agencyCnpj || ''}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="00.000.000/0001-00"
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-bold text-slate-700">CRECI</label>
+                                            <input 
+                                                type="text" 
+                                                name="agencyCreci"
+                                                value={localSettings.agencyCreci || ''}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="J-00000"
+                                            />
+                                        </div>
                                         <div className="space-y-4">
                                             <label className="block text-sm font-bold text-slate-700">E-mail Comercial</label>
                                             <input 
@@ -403,8 +432,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 name="contactEmail"
                                                 value={localSettings.contactEmail}
                                                 onChange={handleChange}
-                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none"
-                                                placeholder="contato@empresa.com"
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="contato@imobiliaria.com"
                                             />
                                         </div>
                                         <div className="space-y-4">
@@ -414,25 +443,90 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 name="contactPhone"
                                                 value={localSettings.contactPhone}
                                                 onChange={handleChange}
-                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none"
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
                                                 placeholder="(11) 99999-9999"
                                             />
                                         </div>
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-bold text-slate-700">Endereço da Sede</label>
+                                            <input 
+                                                type="text" 
+                                                name="address"
+                                                value={localSettings.address}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="Av. Paulista, 1000 - São Paulo, SP"
+                                            />
+                                        </div>
+                                        <div className="space-y-4 md:col-span-2">
+                                            <label className="block text-sm font-bold text-slate-700">URL do Sistema (para links de assinatura)</label>
+                                            <input 
+                                                type="text" 
+                                                name="appUrl"
+                                                value={localSettings.appUrl}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none font-mono text-sm"
+                                                placeholder={import.meta.env.VITE_APP_URL || 'https://meusite.com.br'}
+                                            />
+                                            <p className="text-xs text-slate-400">Usado nos e-mails de assinatura de contrato. Se vazio, usa <code className="bg-slate-100 px-1 rounded">{import.meta.env.VITE_APP_URL || 'window.location.origin'}</code></p>
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-4">
-                                        <label className="block text-sm font-bold text-slate-700">Endereço da Sede</label>
-                                        <input 
-                                            type="text" 
-                                            name="address"
-                                            value={localSettings.address}
-                                            onChange={handleChange}
-                                            className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none"
-                                            placeholder="Av. Paulista, 1000 - São Paulo, SP"
-                                        />
+                                    {/* Rubrica / Carimbo */}
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6">
+                                            <span className="material-symbols-outlined text-blue-600">badge</span>
+                                            Assinatura Digital da Imobiliária
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Rubrica / Carimbo (imagem)</label>
+                                                <div
+                                                    onClick={() => document.getElementById('stampInput')?.click()}
+                                                    className="w-full h-36 border-2 border-dashed border-blue-300 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all group"
+                                                >
+                                                    {localSettings.agencyStampUrl ? (
+                                                        <img src={localSettings.agencyStampUrl} className="max-h-28 object-contain" alt="Rubrica" />
+                                                    ) : (
+                                                        <>
+                                                            <span className="material-symbols-outlined text-3xl text-blue-400 group-hover:text-blue-600">upload</span>
+                                                            <span className="text-xs text-blue-500 font-medium">Clique para fazer upload</span>
+                                                        </>
+                                                    )}
+                                                    <input
+                                                        id="stampInput"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (!file) return;
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target?.result as string }));
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }}
+                                                        className="hidden"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Nome do Assinante</label>
+                                                <input
+                                                    type="text"
+                                                    name="agencyStampName"
+                                                    value={localSettings.agencyStampName || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                    placeholder="Ex: Nome do Responsável ou Razão Social"
+                                                />
+                                                <p className="text-xs text-slate-400">Este nome aparecerá na linha de assinatura da imobiliária nos contratos.</p>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div className="pt-4 space-y-6">
+                                    {/* Redes Sociais */}
+                                    <div className="pt-4 border-t border-slate-100 space-y-6">
                                         <h3 className="font-bold text-slate-800 flex items-center gap-2">Redes Sociais</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div className="relative">
@@ -483,6 +577,59 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                         {activeTab === 'contracts' && (
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
+                                    {/* Rubrica e Nome da Imobiliária */}
+                                    <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-200 space-y-6">
+                                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-blue-600">badge</span>
+                                            Assinatura da Imobiliária
+                                        </h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Rubrica / Carimbo (imagem)</label>
+                                                <div
+                                                    onClick={() => document.getElementById('stampInput')?.click()}
+                                                    className="w-full h-36 border-2 border-dashed border-blue-300 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all group"
+                                                >
+                                                    {localSettings.agencyStampUrl ? (
+                                                        <img src={localSettings.agencyStampUrl} className="max-h-28 object-contain" alt="Rubrica" />
+                                                    ) : (
+                                                        <>
+                                                            <span className="material-symbols-outlined text-3xl text-blue-400 group-hover:text-blue-600">upload</span>
+                                                            <span className="text-xs text-blue-500 font-medium">Clique para fazer upload</span>
+                                                        </>
+                                                    )}
+                                                    <input
+                                                        id="stampInput"
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (!file) return;
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target?.result as string }));
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }}
+                                                        className="hidden"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <label className="block text-sm font-bold text-slate-700">Nome do Assinante (imobiliária)</label>
+                                                <input
+                                                    type="text"
+                                                    name="agencyStampName"
+                                                    value={localSettings.agencyStampName || ''}
+                                                    onChange={handleChange}
+                                                    className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                    placeholder="Ex: Nome do Responsável ou Razão Social"
+                                                />
+                                                <p className="text-xs text-slate-400">Este nome aparecerá na linha de assinatura da imobiliária nos contratos.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="flex items-center justify-between">
                                         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                             <span className="material-symbols-outlined text-orange-500 text-3xl">description</span>

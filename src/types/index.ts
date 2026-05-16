@@ -1,30 +1,3 @@
-export interface ChatMessage {
-    id: number;
-    sender: 'agent' | 'user';
-    text: string;
-    time: string;
-    read: boolean;
-    attachment?: {
-        type: 'contract' | 'invoice' | 'receipt';
-        id: string | number;
-        title: string;
-        status?: string;
-    };
-}
-
-export interface Conversation {
-    id: number | string;
-    userId: number | string;
-    userName: string;
-    userAvatar: string;
-    userRole: 'client' | 'owner' | 'lead';
-    lastMessage: string;
-    lastMessageTime: string;
-    unreadCount: number;
-    messages: ChatMessage[];
-    propertyInterest?: string;
-}
-
 export interface User {
     id: number | string;
     name: string;

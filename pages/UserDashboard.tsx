@@ -10,7 +10,6 @@ interface UserDashboardProps {
     onLogout: () => void;
     onEditProfile?: () => void;
     onUpdateContract?: (id: number | string, data: Partial<Contract>) => void;
-    onOpenLegalChat?: (contract: Contract) => void;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -21,8 +20,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     onPropertySelect,
     onLogout,
     onEditProfile,
-    onUpdateContract,
-    onOpenLegalChat
+    onUpdateContract
 }) => {
     const [activeTab, setActiveTab] = useState<'profile' | 'favorites' | 'listings' | 'juridico'>('profile');
     const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
@@ -31,15 +29,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     // Filtrar imóveis do proprietário (se for owner)
     const myListings = properties.filter(p => p.ownerId === user.id);
 
-    const myFavorites = properties.filter(p => user.favorites?.includes(String(p.id)));
+    const myFavorites = properties.filter(p => Array.isArray(user.favorites) && user.favorites.includes(String(p.id)));
 
     const myContracts = contracts.filter(c => c.clientId === user.id || c.ownerId === user.id);
-
-    const handleSignContract = (contract: Contract) => {
-        if (onOpenLegalChat) {
-            onOpenLegalChat(contract);
-        }
-    };
 
     return (
         <div className="min-h-screen bg-slate-50 font-display">
@@ -58,7 +50,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             <p className="text-sm font-bold text-slate-900">{user.name}</p>
                             <p className="text-xs text-slate-500 capitalize">{user.role === 'owner' ? 'Anunciante' : 'Cliente'}</p>
                         </div>
-                        <div className="size-10 rounded-full bg-slate-200 bg-cover bg-center border border-slate-300" style={{ backgroundImage: `url("${user.avatar}")` }}></div>
+                        <div className="size-10 rounded-full bg-slate-200 bg-cover bg-center border border-slate-300" style={{ backgroundImage: user.avatar ? `url("${user.avatar}")` : 'none' }}></div>
                         <button onClick={onLogout} className="ml-2 p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors" title="Sair">
                             <span className="material-symbols-outlined">logout</span>
                         </button>
@@ -74,7 +66,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     <div className="lg:col-span-1">
                         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 sticky top-24">
                             <div className="flex flex-row lg:flex-col items-center gap-4 lg:gap-0 mb-6 lg:mb-6">
-                                <div className="size-16 lg:size-24 rounded-full bg-slate-200 bg-cover bg-center border-2 lg:border-4 border-slate-50 lg:mb-3 shrink-0" style={{ backgroundImage: `url("${user.avatar}")` }}></div>
+                                <div className="size-16 lg:size-24 rounded-full bg-slate-200 bg-cover bg-center border-2 lg:border-4 border-slate-50 lg:mb-3 shrink-0" style={{ backgroundImage: user.avatar ? `url("${user.avatar}")` : 'none' }}></div>
                                 <div className="flex flex-col items-start lg:items-center">
                                     <h2 className="text-xl font-bold text-slate-900 leading-tight">{user.name}</h2>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mt-1 lg:mt-2 ${user.role === 'owner' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
@@ -343,13 +335,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                         <span className="material-symbols-outlined">download</span> Baixar Cópia
                                                                     </button>
                                                                 )}
-                                                                <button
-                                                                    onClick={() => onOpenLegalChat && onOpenLegalChat(contract)}
-                                                                    className="flex-1 md:flex-none px-6 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-                                                                >
-                                                                    <span className="material-symbols-outlined">contact_support</span> Canal Jurídico
-                                                                </button>
-
                                                                 {contract.nextPaymentStatus !== 'paid' && (
                                                                     <button className="md:ml-auto flex-1 md:flex-none px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center justify-center gap-2">
                                                                         <span className="material-symbols-outlined">upload_file</span> Enviar Comprovante

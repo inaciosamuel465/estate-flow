@@ -4,16 +4,18 @@ import { addContract, deleteContract, updateContract } from '../src/services/dat
 import { generateContractPDF } from '../src/services/pdfService';
 import SignaturePad from '../components/SignaturePad';
 
-// --- Dados da Imobiliária (Fixo para o Cabeçalho) ---
-const AGENCY_INFO = {
-    name: "EstateFlow Negócios Imobiliários Ltda.",
-    cnpj: "12.345.678/0001-90",
-    creci: "J-12345",
-    address: "Av. Paulista, 1000, 15º Andar - Jardins, São Paulo - SP",
-    phone: "(11) 3000-0000",
-    email: "juridico@estateflow.com",
-    logo: "https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=200&auto=format&fit=crop"
-};
+// --- Dados da Imobiliária (dinâmico via settings) ---
+const getAgencyInfo = (settings?: Record<string, string>) => ({
+    name: settings?.companyName || "EstateFlow Negócios Imobiliários Ltda.",
+    stampUrl: settings?.agencyStampUrl || '',
+    stampName: settings?.agencyStampName || settings?.companyName || "EstateFlow Negócios Imobiliários Ltda.",
+    cnpj: settings?.agencyCnpj || "12.345.678/0001-90",
+    creci: settings?.agencyCreci || "J-12345",
+    address: settings?.address || "Av. Paulista, 1000, 15º Andar - Jardins, São Paulo - SP",
+    phone: settings?.contactPhone || "(11) 3000-0000",
+    email: settings?.contactEmail || "juridico@estateflow.com",
+    logo: settings?.logoUrl || ""
+});
 
 // --- Templates Jurídicos Detalhados ---
 const CONTRACT_TEMPLATES = {
@@ -116,11 +118,11 @@ interface ContractsPageProps {
     onAddContract: (c: Contract) => void;
     onDeleteContract: (id: number | string) => void;
     onUpdateContract: (id: number | string, data: Partial<Contract>) => void;
-    onOpenLegalChat?: (contract: Contract) => void;
-    onShareContractToChat?: (contract: Contract) => void;
 }
 
-const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, users, settings, onAddContract, onDeleteContract, onUpdateContract, onOpenLegalChat, onShareContractToChat }) => {
+const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, users, settings, onAddContract, onDeleteContract, onUpdateContract }) => {
+    const AGENCY = useMemo(() => getAgencyInfo(settings), [settings]);
+
     // --- States ---
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'view'>('list');
     const [layoutMode, setLayoutMode] = useState<'grid' | 'table'>('grid');
@@ -327,10 +329,10 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         let text = template.content;
 
         const replacements: Record<string, string> = {
-            '{{AGENCY_NAME}}': AGENCY_INFO.name,
-            '{{AGENCY_CNPJ}}': AGENCY_INFO.cnpj,
-            '{{AGENCY_CRECI}}': AGENCY_INFO.creci,
-            '{{AGENCY_ADDRESS}}': AGENCY_INFO.address,
+            '{{AGENCY_NAME}}': AGENCY.name,
+            '{{AGENCY_CNPJ}}': AGENCY.cnpj,
+            '{{AGENCY_CRECI}}': AGENCY.creci,
+            '{{AGENCY_ADDRESS}}': AGENCY.address,
 
             '{{OWNER_NAME}}': contract.ownerName.toUpperCase(),
             '{{OWNER_DOC}}': owner?.document || '000.000.000-00',
@@ -368,7 +370,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         setViewMode('view');
     };
 
-    const handleDownloadPDF = (contract: Contract) => {
+    const handleDownloadPDF = async (contract: Contract) => {
         const property = properties.find(p => p.id === contract.propertyId);
         const tenant = users.find(u => u.id === contract.clientId);
         const owner = users.find(u => u.id === contract.ownerId);
@@ -378,7 +380,7 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
             return;
         }
 
-        generateContractPDF(contract, property, tenant, owner, contract.customContent || generateDocumentBody(contract));
+        await generateContractPDF(contract, property, tenant, owner, contract.customContent || generateDocumentBody(contract), AGENCY.logo, AGENCY.name, AGENCY.cnpj, AGENCY.creci, AGENCY.address, AGENCY.stampUrl, AGENCY.stampName);
     };
 
     const handleEditContract = (contract: Contract) => {
@@ -411,6 +413,8 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         setIsEditingText(false);
     };
 
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
+
     const handleSignatureSave = (dataUrl: string) => {
         if (!viewingContract) return;
         
@@ -430,6 +434,59 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         
         setIsSignatureModalOpen(false);
         alert("Contrato assinado digitalmente com sucesso!");
+    };
+
+    const handleSendForSignature = async () => {
+        if (!viewingContract) return;
+        setIsSendingEmail(true);
+        try {
+            const baseUrl = settings?.appUrl || import.meta.env.VITE_APP_URL || window.location.origin;
+            const contractUrl = `${baseUrl}/contrato/${viewingContract.id}`;
+            const client = users.find(u => u.id === viewingContract.clientId);
+            const to = client?.email;
+            if (!to) {
+                alert('Cliente não possui email cadastrado.');
+                setIsSendingEmail(false);
+                return;
+            }
+            const res = await fetch('/api/email/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to,
+                    subject: `Contrato ${viewingContract.propertyTitle} - EstateFlow - Pendente de Assinatura`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <div style="text-align: center; padding: 30px 0;">
+                                ${AGENCY.logo ? `<img src="${AGENCY.logo}" style="height: 60px; object-fit: contain;" />` : ''}
+                                <h1 style="color: #1e293b; margin-top: 16px;">Contato para Assinatura</h1>
+                            </div>
+                            <p style="font-size: 16px; color: #475569;">Olá <strong>${viewingContract.clientName}</strong>,</p>
+                            <p style="font-size: 16px; color: #475569;">A <strong>${AGENCY.name}</strong> disponibilizou para você o contrato referente ao imóvel <strong>${viewingContract.propertyTitle}</strong>.</p>
+                            <p style="font-size: 16px; color: #475569;">Clique no botão abaixo para ler, assinar digitalmente e baixar o documento.</p>
+                            <div style="text-align: center; padding: 30px 0;">
+                                <a href="${contractUrl}" style="display: inline-block; background: #2b6cee; color: white; padding: 14px 40px; border-radius: 8px; text-decoration: none; font-size: 16px; font-weight: bold;">Acessar Contrato</a>
+                            </div>
+                            <p style="font-size: 14px; color: #94a3b8;">Se o botão não funcionar, copie e cole o link abaixo no navegador:</p>
+                            <p style="font-size: 14px; color: #2b6cee; word-break: break-all;">${contractUrl}</p>
+                            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;" />
+                            <p style="font-size: 12px; color: #94a3b8;">Este é um email automático do EstateFlow Suite. Por favor não responda.</p>
+                        </div>
+                    `
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(`Link de assinatura enviado para ${to}!`);
+            } else {
+                alert('Erro ao enviar email. Verifique as configurações de SMTP.');
+            }
+        } catch (e) {
+            console.error('Erro ao enviar email:', e);
+            alert('Erro de conexão ao enviar email.');
+        } finally {
+            setIsSendingEmail(false);
+        }
     };
 
     return (
@@ -794,10 +851,10 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                                                     {/* Custom A4 Layout for each page */}
                                                     {idx === 0 && (
                                                         <div className="flex items-center justify-between border-b-2 border-slate-900 pb-6 mb-10">
-                                                            <img src={AGENCY_INFO.logo} className="h-16 object-contain" alt="Logo" />
+                                                            {AGENCY.logo ? <img src={AGENCY.logo} className="h-16 object-contain" alt="Logo" /> : <div className="h-16 w-16 bg-slate-100 rounded-xl flex items-center justify-center"><span className="text-slate-400 font-bold text-lg">{AGENCY.name.charAt(0)}</span></div>}
                                                             <div className="text-right">
-                                                                <h2 className="text-lg font-black uppercase tracking-tight">{AGENCY_INFO.name}</h2>
-                                                                <p className="text-[10px] text-slate-500">{AGENCY_INFO.cnpj} | {AGENCY_INFO.creci}</p>
+                                                                <h2 className="text-lg font-black uppercase tracking-tight">{AGENCY.name}</h2>
+                                                                <p className="text-[10px] text-slate-500">{AGENCY.cnpj} | {AGENCY.creci}</p>
                                                             </div>
                                                         </div>
                                                     )}
@@ -818,18 +875,22 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                                                             
                                                             <div className="grid grid-cols-2 gap-12 mt-10">
                                                                 <div className="text-center">
-                                                                    <div className="h-12 flex items-center justify-center mb-2">
-                                                                        <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest italic">[Assinatura Administradora]</span>
+                                                                    <div className="h-14 flex items-center justify-center mb-2">
+                                                                        {AGENCY.stampUrl ? (
+                                                                            <img src={AGENCY.stampUrl} className="h-14 object-contain" alt="Rubrica" />
+                                                                        ) : (
+                                                                            <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest italic">[Assinatura Administradora]</span>
+                                                                        )}
                                                                     </div>
                                                                     <div className="border-t border-black w-full pt-1">
-                                                                        <p className="font-bold text-[10px] uppercase">{AGENCY_INFO.name}</p>
+                                                                        <p className="font-bold text-[10px] uppercase">{AGENCY.stampName}</p>
                                                                         <p className="text-[9px]">Representante Legal</p>
                                                                     </div>
                                                                 </div>
                                                                 <div className="text-center">
-                                                                    <div className="h-12 flex flex-col items-center justify-center mb-2">
+                                                                    <div className="h-14 flex flex-col items-center justify-center mb-2">
                                                                         {viewingContract.signatureImage && (
-                                                                            <img src={viewingContract.signatureImage} className="h-12 object-contain" alt="Assinatura" />
+                                                                            <img src={viewingContract.signatureImage} className="h-14 object-contain" alt="Assinatura" />
                                                                         )}
                                                                         {!viewingContract.signatureImage && (
                                                                              <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest italic">[Pendente Assinatura Cliente]</span>
@@ -891,15 +952,20 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                                                     <span className="material-symbols-outlined">download</span> Gerar PDF Profissional
                                                 </button>
 
+                                                <button onClick={handleSendForSignature} disabled={isSendingEmail} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all disabled:opacity-50">
+                                                    {isSendingEmail ? (
+                                                        <><span className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Enviando...</>
+                                                    ) : (
+                                                        <><span className="material-symbols-outlined">send</span> Enviar para Assinatura</>
+                                                    )}
+                                                </button>
+
                                                 <div className="h-px bg-slate-100 dark:bg-slate-800 my-2" />
 
                                                 <button onClick={() => setIsEditingText(true)} className="w-full py-3 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-sm">
                                                     <span className="material-symbols-outlined text-[18px]">edit_note</span> Editar Cláusulas
                                                 </button>
 
-                                                <button onClick={() => onShareContractToChat?.(viewingContract)} className="w-full py-3 text-blue-600 bg-blue-50 dark:bg-blue-900/10 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-blue-100 transition-all">
-                                                    <span className="material-symbols-outlined text-[16px]">send</span> Compartilhar no Chat
-                                                </button>
                                             </>
                                         )}
                                     </div>

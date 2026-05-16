@@ -1,4 +1,4 @@
-import { Property, Contract, User, Conversation, ChatMessage, AppNotification as Notification } from "../types";
+import { Property, Contract, User, AppNotification as Notification } from "../types";
 import * as neon from "./neonService";
 import type { Lead } from "./neonService";
 
@@ -68,6 +68,10 @@ export const getDashboardStats = async () => {
 
 export const getContracts = async (): Promise<Contract[]> => {
     return await neon.getContracts();
+};
+
+export const getContractById = async (id: string): Promise<Contract | null> => {
+    return await neon.getContractById(id);
 };
 
 export const addContract = async (contract: Contract): Promise<Contract> => {
@@ -184,47 +188,6 @@ export const toggleFavorite = async (userId: string, propertyId: string | number
     } catch (error) {
         console.error("Erro ao favoritar:", error);
         return null;
-    }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CHAT / CONVERSATIONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const saveMessage = async (
-    conversationId: string, 
-    message: ChatMessage, 
-    conversationData?: Partial<Conversation>
-): Promise<boolean> => {
-    try {
-        await neon.saveMessage(conversationId, message, conversationData);
-        return true;
-    } catch (error) {
-        console.error("Erro ao salvar mensagem:", error);
-        return false;
-    }
-};
-
-export const subscribeToConversations = (callback: (conversations: Conversation[]) => void): (() => void) => {
-    const fetchData = async () => {
-        try {
-            const result = await neon.getConversations('all');
-            callback(result);
-        } catch (e) {
-            callback([]);
-        }
-    };
-    fetchData();
-    // Reduzido de 10s para 20s — em produção, usar SSE ou WebSockets
-    const interval = setInterval(fetchData, 20000);
-    return () => clearInterval(interval);
-};
-
-export const markConversationAsRead = async (id: string): Promise<void> => {
-    try {
-        await neon.markConversationAsRead(id);
-    } catch (error) {
-        console.error("Erro ao marcar conversa como lida:", error);
     }
 };
 

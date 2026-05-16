@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { GoogleGenAI } from "@google/genai";
 
 const AreaSimulation: React.FC = () => {
   const [viewMode, setViewMode] = useState<'map' | 'street' | '3d'>('map');
@@ -18,38 +17,10 @@ const AreaSimulation: React.FC = () => {
     setSelectedLocation(location);
     
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
-      if (!apiKey) {
-        console.warn("Sem chave de API encontrada, simulando geração.");
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        setGeneratedImage("https://picsum.photos/1600/900?random=" + Math.random());
-        setIsGenerating(false);
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Photorealistic street view of ${location} in a modern upscale neighborhood. 
-                      Perspective: Eye level standing on sidewalk.
-                      Elements: Contemporary buildings, lush street trees, modern street furniture, paved sidewalks.
-                      Atmosphere: ${settings.time}, ${settings.weather}, ${settings.activity} pedestrian activity. 
-                      Cinematic lighting, high detail, 8k resolution style.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts: [{ text: prompt }] },
-      });
-
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
-            break;
-          }
-        }
-      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setGeneratedImage("https://picsum.photos/1600/900?random=" + Math.random());
     } catch (error) {
       console.error("Falha na geração", error);
-      setGeneratedImage("https://picsum.photos/1600/900?random=" + Math.random());
     } finally {
       setIsGenerating(false);
     }

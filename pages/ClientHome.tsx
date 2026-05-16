@@ -11,7 +11,6 @@ interface ClientHomeProps {
     onUserDashboardClick: () => void;
     onLogoutClick?: () => void;
     onFavoriteClick: (id: number | string) => void;
-    onChatClick: (title: string) => void;
     settings?: Record<string, string>;
 }
 
@@ -32,7 +31,6 @@ const ClientHome: React.FC<ClientHomeProps> = ({
     onUserDashboardClick,
     onLogoutClick,
     onFavoriteClick,
-    onChatClick,
     settings = {}
 }) => {
     // --- Estados de Filtro ---
@@ -164,7 +162,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                                     onClick={onUserDashboardClick}
                                     className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all border border-white/20 text-white group"
                                 >
-                                    <div className="size-8 rounded-full bg-slate-300 bg-cover bg-center ring-2 ring-white/20 group-hover:ring-white/50 transition-all" style={{ backgroundImage: `url("${currentUser.avatar}")` }}></div>
+                                    <div className="size-8 rounded-full bg-slate-300 bg-cover bg-center ring-2 ring-white/20 group-hover:ring-white/50 transition-all" style={{ backgroundImage: currentUser.avatar ? `url("${currentUser.avatar}")` : 'none' }}></div>
                                     <span className="text-sm font-semibold max-w-[100px] truncate">{currentUser.name.split(' ')[0]}</span>
                                 </button>
                                 <button
@@ -391,12 +389,12 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onFavoriteClick(property.id); }}
                                             className={`absolute top-4 right-4 size-10 backdrop-blur-md rounded-full flex items-center justify-center transition-all shadow-sm group-hover:scale-110 
-                                            ${currentUser?.favorites?.includes(String(property.id))
+                                            ${Array.isArray(currentUser?.favorites) && currentUser.favorites.includes(String(property.id))
                                                     ? 'bg-rose-500 text-white'
                                                     : 'bg-white/20 hover:bg-white text-white hover:text-rose-500'
                                                 }`}
                                         >
-                                            <span className={`material-symbols-outlined notranslate text-[20px] ${currentUser?.favorites?.includes(String(property.id)) ? 'fill-current' : ''}`}>favorite</span>
+                                            <span className={`material-symbols-outlined notranslate text-[20px] ${Array.isArray(currentUser?.favorites) && currentUser.favorites.includes(String(property.id)) ? 'fill-current' : ''}`}>favorite</span>
                                         </button>
 
                                         <div className="absolute bottom-4 left-4 text-white">
@@ -552,7 +550,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                     className={`flex flex-col items-center gap-1 transition-colors ${currentUser ? 'text-primary' : 'text-slate-400'}`}
                 >
                     {currentUser ? (
-                        <div className="size-6 rounded-full bg-slate-200 bg-cover bg-center border border-current" style={{ backgroundImage: `url("${currentUser.avatar}")` }}></div>
+                        <div className="size-6 rounded-full bg-slate-200 bg-cover bg-center border border-current" style={{ backgroundImage: currentUser.avatar ? `url("${currentUser.avatar}")` : 'none' }}></div>
                     ) : (
                         <span className="material-symbols-outlined">person</span>
                     )}

@@ -1,4 +1,4 @@
-import { Property, Contract, User, Conversation } from "../types";
+import { Property, Contract, User } from "../types";
 import * as neon from "../services/neonService";
 
 // --- DADOS MOCKADOS ORIGINAIS DO APP.TSX ---

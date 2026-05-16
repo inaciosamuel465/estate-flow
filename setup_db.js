@@ -154,33 +154,7 @@ async function setup() {
         )`;
         console.log('Table "marketing_campaigns" ready.');
 
-        // 9. Conversations
-        await sql`CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            user_name TEXT,
-            user_avatar TEXT,
-            user_role TEXT,
-            last_message TEXT,
-            last_update TIMESTAMP DEFAULT NOW(),
-            unread_count INTEGER DEFAULT 0,
-            participants TEXT[] DEFAULT '{}'
-        )`;
-        console.log('Table "conversations" ready.');
-
-        // 10. Messages
-        await sql`CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
-            conversation_id TEXT,
-            sender_id TEXT,
-            text TEXT,
-            timestamp TIMESTAMP DEFAULT NOW(),
-            attachment TEXT,
-            read BOOLEAN DEFAULT FALSE
-        )`;
-        console.log('Table "messages" ready.');
-
-        // 11. Property Views
+        // 9. Property Views
         await sql`CREATE TABLE IF NOT EXISTS property_views (
             id SERIAL PRIMARY KEY,
             property_id TEXT,

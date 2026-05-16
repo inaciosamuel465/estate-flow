@@ -50,12 +50,11 @@ interface PropertyDetailsProps {
     properties?: Property[]; // Adicionado para dados reais
     onBack?: () => void;
     isPublic?: boolean;
-    onChatStart?: (propertyTitle: string) => void;
     currentUser?: User | null;
     settings?: Record<string, string>;
 }
 
-const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, properties = [], onBack, isPublic = false, onChatStart, currentUser, settings = {} }) => {
+const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, properties = [], onBack, isPublic = false, currentUser, settings = {} }) => {
     const propertyData = useMemo(() => {
         // 1. Tentar encontrar nos dados reais do Firebase/Neon
         const realProperty = properties.find(p => String(p.id) === String(propertyId));
@@ -270,16 +269,6 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
 
         // Abre em nova aba
         window.open(url, '_blank');
-        setShowNegotiationModal(false);
-    };
-
-    const handleInternalChat = () => {
-        // Usa a função existente de chat interno
-        if (onChatStart && propertyData) {
-            onChatStart(propertyData.title);
-        } else {
-            alert("Chat interno indisponível nesta visualização.");
-        }
         setShowNegotiationModal(false);
     };
 
@@ -869,13 +858,6 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
                                 Conversar pelo WhatsApp
                             </button>
 
-                            <button
-                                onClick={handleInternalChat}
-                                className="w-full py-4 bg-primary hover:bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-3 transition-all shadow-lg shadow-primary/20 active:scale-95"
-                            >
-                                <span className="material-symbols-outlined notranslate text-2xl">forum</span>
-                                Usar Chat Interno
-                            </button>
                         </div>
 
                         <div className="mt-6 text-center">

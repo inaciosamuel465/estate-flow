@@ -23,7 +23,12 @@ const clearSession = () => {
 
 const getSession = (): User | null => {
     const session = localStorage.getItem(SESSION_KEY);
-    return session ? JSON.parse(session) : null;
+    if (!session) return null;
+    const user = JSON.parse(session) as User;
+    if (user && !Array.isArray(user.favorites)) {
+        user.favorites = [];
+    }
+    return user;
 };
 
 // Hash de senha simples usando Web Crypto API
@@ -84,6 +89,9 @@ export const loginUser = async (email: string, pass: string): Promise<AuthRespon
         }
 
         const { password, ...safeUser } = user;
+        if (!Array.isArray(safeUser.favorites)) {
+            safeUser.favorites = [];
+        }
         saveSession(safeUser);
         
         return { user: safeUser as User };

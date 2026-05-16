@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Property, Contract, Conversation } from '../src/types';
+import { Property, Contract } from '../src/types';
 import { getDashboardStats, getActivityLog, getLeads } from '../src/services/dataService';
 import { generateAIInsight } from '../src/services/aiAnalyticsService';
 import type { AIInsight } from '../src/services/aiAnalyticsService';
 
 interface AdminDashboardProps {
   onNavigate: (view: string) => void;
-  conversations?: Conversation[];
   properties?: Property[];
   contracts?: Contract[];
   currentUser?: { name?: string; avatar?: string; } | null;
@@ -24,19 +23,18 @@ interface AlertItem {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigate,
-  conversations = [],
   properties = [],
   contracts = [],
   currentUser
 }) => {
-  const [timeRange, setTimeRange] = useState<'30d' | '3m' | '1y'>('30d');
-  const [isBoosting, setIsBoosting] = useState(false);
-  const [boostSuccess, setBoostSuccess] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
   const [dbStats, setDbStats] = useState({ totalViews: 0, viewsThisWeek: 0, totalLeads: 0, leadsThisWeek: 0, activeProperties: 0, totalRevenue: 0 });
   const [activityLog, setActivityLog] = useState<any[]>([]);
+  const [allLeads, setAllLeads] = useState<any[]>([]);
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [isBoosting, setIsBoosting] = useState(false);
+  const [boostSuccess, setBoostSuccess] = useState(false);
 
   // Load real DB stats and AI insights
   useEffect(() => {
@@ -45,6 +43,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     getDashboardStats().then(setDbStats).catch(() => {});
     getActivityLog(10).then(setActivityLog).catch(() => {});
+    getLeads().then(setAllLeads).catch(() => {});
 
     if (properties.length > 0) {
       setIsLoadingAI(true);
@@ -72,21 +71,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onNavigate]);
 
-  const totalUnread = conversations.reduce((acc, conv) => acc + conv.unreadCount, 0);
+  // All values come from real DB queries (getDashboardStats)
+  const activeCount = dbStats.activeProperties;
+  const totalViews = dbStats.totalViews;
+  const totalLeads = dbStats.totalLeads;
+  const totalRevenue = dbStats.totalRevenue;
+  const viewsThisWeek = dbStats.viewsThisWeek;
+  const leadsThisWeek = dbStats.leadsThisWeek;
 
-  // Use real DB stats merged with local calculations
-  const activeCount = dbStats.activeProperties || properties.filter(p => p.status === 'active').length;
-  const totalViews = dbStats.totalViews || 0;
-  const totalLeads = dbStats.totalLeads || conversations.length + contracts.length * 3;
+  // Conversion rate: leads that converted / total leads
+  const convertedLeads = allLeads.filter(l => l.status === 'converted').length;
+  const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
 
-  // Ticket Médio from real DB revenue
-  const totalRevenue = dbStats.totalRevenue || 0;
-  const activeProps = properties.filter(p => p.status === 'active');
-  const totalPrice = activeProps.reduce((acc, p) => {
-    const price = typeof p.price === 'string' ? parseFloat(p.price.replace(/[^\d]/g, '')) : p.price;
-    return acc + (price || 0);
-  }, 0);
-  const averageTicket = activeCount > 0 ? totalPrice / activeCount : 0;
+  // Ticket médio: receita ativa / número de contratos ativos
+  const activeContracts = contracts.filter(c => c.status === 'active');
+  const averageTicket = activeContracts.length > 0 ? totalRevenue / activeContracts.length : 0;
+
+  // Total interactions: views + leads (real data only)
+  const totalInteractions = totalViews + totalLeads;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
@@ -115,40 +117,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Setup initial date moved to combined useEffect above
-
-  // Mock Data configuration based on real data calculation
-  const data = {
-    '30d': {
-      active: activeCount,
-      views: formatViews(totalViews),
-      leads: totalLeads,
-      conversion: '2.4%', // Estimado
-      ticket: formatCurrency(averageTicket),
-      totalInteractions: formatViews(totalViews + totalLeads * 10),
-      chartPath: "M0,220 C50,220 50,150 100,150 C150,150 150,100 200,100 C250,100 250,180 300,180 C350,180 350,120 400,120 C450,120 450,50 500,50 C550,50 550,90 600,90 C650,90 650,30 700,30 C750,30 750,80 800,80"
-    },
-    '3m': {
-      active: activeCount, // Aumentaria historicamente, mas mantemos atual para simplificar
-      views: formatViews(totalViews * 3),
-      leads: totalLeads * 3,
-      conversion: '2.5%',
-      ticket: formatCurrency(averageTicket),
-      totalInteractions: formatViews((totalViews + totalLeads * 10) * 3),
-      chartPath: "M0,250 C80,240 120,200 200,180 C280,160 320,100 400,120 C480,140 520,80 600,60 C680,40 720,20 800,10"
-    },
-    '1y': {
-      active: activeCount,
-      views: formatViews(totalViews * 12),
-      leads: totalLeads * 12,
-      conversion: '2.6%',
-      ticket: formatCurrency(averageTicket),
-      totalInteractions: formatViews((totalViews + totalLeads * 10) * 12),
-      chartPath: "M0,280 C100,270 150,250 250,200 C350,150 400,180 500,120 C600,60 650,100 800,20"
-    }
-  };
-
-  const currentData = data[timeRange];
+  // Simple chart bars based on real weekly views and leads
+  const chartBars = [
+    { label: 'Views', value: viewsThisWeek, max: Math.max(totalViews, 1), color: 'bg-violet-500' },
+    { label: 'Leads', value: leadsThisWeek, max: Math.max(totalLeads, 1), color: 'bg-amber-500' },
+    { label: 'Conversões', value: convertedLeads, max: Math.max(totalLeads, 1), color: 'bg-emerald-500' },
+  ];
 
   const handleBoost = () => {
     setIsBoosting(true);
@@ -221,10 +195,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span className="text-xs font-bold uppercase tracking-wider">Resumo Inteligente IA</span>
                 </div>
                 <h2 className="text-white text-xl md:text-2xl font-bold leading-snug">
-                  {isLoadingAI ? 'Analisando dados do seu portfólio...' : aiInsight?.summary || (import.meta.env.VITE_GEMINI_API_KEY ? 'Processando dados...' : 'Configure a API Key da IA para insights.')}
+                  {isLoadingAI ? 'Analisando dados do seu portfólio...' : aiInsight?.summary || 'Processando dados...'}
                 </h2>
                 <p className="text-blue-100 text-sm md:text-base font-medium leading-relaxed">
-                  {isLoadingAI ? 'A IA está lendo seus dados de leads, imóveis e contratos...' : aiInsight?.weeklyHighlight || (import.meta.env.VITE_GEMINI_API_KEY ? 'Gerando resumo semanal...' : 'Adicione VITE_GEMINI_API_KEY ao .env.local.')}
+                  {isLoadingAI ? 'Analisando leads, imóveis e contratos...' : aiInsight?.weeklyHighlight || 'Gerando resumo semanal...'}
                 </p>
               </div>
               <div className="flex shrink-0">
@@ -254,66 +228,66 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Grid de Estatísticas - Scrollable horizontal on mobile */}
-          <div className="flex xl:grid xl:grid-cols-5 gap-4 overflow-x-auto pb-4 xl:pb-0 no-scrollbar">
+          {/* Grid de Estatísticas */}
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Card 1 — Imóveis Ativos */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
+            <div className="flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">home_work</span>
                 </div>
-                <span className="flex items-center text-blue-600 text-xs font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full">{currentData.active} ativos</span>
+                <span className="flex items-center text-blue-600 text-xs font-bold bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full">{activeCount} ativos</span>
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Imóveis Ativos</p>
-                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.active}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1">{activeCount}</p>
               </div>
             </div>
             {/* Card 2 — Visualizações */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
+            <div className="flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">visibility</span>
                 </div>
-                {dbStats.viewsThisWeek > 0 && (
-                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{dbStats.viewsThisWeek} hoje</span>
+                {viewsThisWeek > 0 && (
+                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{viewsThisWeek} semana</span>
                 )}
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Visualizações</p>
-                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.views}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1">{formatViews(totalViews)}</p>
               </div>
             </div>
             {/* Card 3 — Leads */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
+            <div className="flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">groups</span>
                 </div>
-                {dbStats.leadsThisWeek > 0 && (
-                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{dbStats.leadsThisWeek} semana</span>
+                {leadsThisWeek > 0 && (
+                  <span className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-500/10 px-2 py-1 rounded-full">+{leadsThisWeek} semana</span>
                 )}
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Leads Gerados</p>
-                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.leads}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1">{totalLeads}</p>
               </div>
             </div>
             {/* Card 4 — Taxa Conversão */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
+            <div className="flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">pie_chart</span>
                 </div>
-                <span className="flex items-center text-slate-500 text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">calculado</span>
+                <span className="flex items-center text-slate-500 text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">real</span>
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Taxa Conversão</p>
-                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.conversion}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1">{conversionRate}%</p>
               </div>
             </div>
             {/* Card 5 — Ticket Médio */}
-            <div className="flex-none w-[160px] md:w-auto xl:flex-1 flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
+            <div className="flex flex-col gap-3 rounded-xl p-5 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors group">
               <div className="flex justify-between items-start">
                 <div className="p-2 rounded-lg bg-teal-50 dark:bg-teal-900/20 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-colors">
                   <span className="material-symbols-outlined text-[24px]">payments</span>
@@ -324,7 +298,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div>
                 <p className="text-slate-500 text-sm font-medium">Ticket Médio</p>
-                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1 transition-all duration-500">{currentData.ticket}</p>
+                <p className="text-slate-900 dark:text-white text-2xl font-bold mt-1">{formatCurrency(averageTicket)}</p>
               </div>
             </div>
           </div>
@@ -336,115 +310,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-4 p-6 border-b border-slate-100 dark:border-slate-800/50">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">Visão Geral de Desempenho</h3>
-                  <p className="text-slate-500 dark:text-text-secondary text-sm">Leads vs Visualizações</p>
-                </div>
-                <div className="flex items-center gap-2 bg-slate-100 dark:bg-[#111318] p-1 rounded-lg">
-                  {[
-                    { id: '30d', label: '30 Dias' },
-                    { id: '3m', label: '3 Meses' },
-                    { id: '1y', label: 'Ano' }
-                  ].map((range) => (
-                    <button
-                      key={range.id}
-                      onClick={() => setTimeRange(range.id as any)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${timeRange === range.id
-                        ? 'bg-white dark:bg-[#282e39] shadow text-slate-900 dark:text-white'
-                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                    >
-                      {range.label}
-                    </button>
-                  ))}
+                  <p className="text-slate-500 dark:text-text-secondary text-sm">Dados reais do banco</p>
                 </div>
               </div>
               <div className="flex flex-col p-6">
                 <div className="flex items-baseline gap-4 mb-6">
-                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white transition-all duration-300">{currentData.totalInteractions}</h2>
+                  <h2 className="text-3xl font-bold text-slate-900 dark:text-white transition-all duration-300">{formatViews(totalInteractions)}</h2>
                   <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Interações</span>
-                  <span className="inline-flex items-center gap-1 text-sm font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                    <span className="material-symbols-outlined text-[16px]">trending_up</span> 15%
-                  </span>
                 </div>
-                {/* SVG Chart */}
-                <div className="relative w-full aspect-[21/9] min-h-[250px]">
-                  <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 800 300">
-                    <defs>
-                      <linearGradient id="gradient1" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#2b6cee" stopOpacity="0.2"></stop>
-                        <stop offset="100%" stopColor="#2b6cee" stopOpacity="0"></stop>
-                      </linearGradient>
-                    </defs>
-                    {[0, 75, 150, 225].map(y => (
-                      <line key={y} className="text-slate-100 dark:text-slate-800" stroke="currentColor" strokeDasharray="4 4" x1="0" x2="800" y1={y} y2={y}></line>
-                    ))}
-                    <line className="text-slate-100 dark:text-slate-800" stroke="currentColor" x1="0" x2="800" y1="300" y2="300"></line>
-
-                    {/* Dynamic Path with simple animation via key */}
-                    <path
-                      key={timeRange}
-                      d={currentData.chartPath}
-                      fill="none"
-                      stroke="#2b6cee"
-                      strokeLinecap="round"
-                      strokeWidth="3"
-                      className="transition-all duration-1000 ease-in-out"
-                    >
-                      <animate attributeName="stroke-dasharray" from="0, 2000" to="2000, 0" dur="1.5s" />
-                    </path>
-
-                    <path
-                      key={`${timeRange}-fill`}
-                      d={`${currentData.chartPath} V300 H0 Z`}
-                      fill="url(#gradient1)"
-                      opacity="0.5"
-                      className="transition-all duration-1000 ease-in-out"
-                    ></path>
-                  </svg>
-
-                  {/* Interactive Tooltip Area */}
-                  <div className="absolute top-1/4 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                    Visitas: 1,204
-                  </div>
-                </div>
-                <div className="flex justify-between mt-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  <span>{timeRange === '30d' ? 'Semana 1' : timeRange === '3m' ? 'Mês 1' : 'Trimestre 1'}</span>
-                  <span>{timeRange === '30d' ? 'Semana 2' : timeRange === '3m' ? 'Mês 2' : 'Trimestre 2'}</span>
-                  <span>{timeRange === '30d' ? 'Semana 3' : timeRange === '3m' ? 'Mês 3' : 'Trimestre 3'}</span>
-                  <span>{timeRange === '30d' ? 'Semana 4' : timeRange === '3m' ? 'Atual' : 'Atual'}</span>
+                {/* Real Data Bars */}
+                <div className="space-y-4">
+                  {chartBars.map(bar => (
+                    <div key={bar.label} className="flex items-center gap-4">
+                      <span className="w-24 text-sm font-medium text-slate-600 dark:text-slate-400">{bar.label}</span>
+                      <div className="flex-1 h-6 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-1000 ${bar.color}`}
+                          style={{ width: `${(bar.value / bar.max) * 100}%`, minWidth: bar.value > 0 ? '4%' : '0%' }}
+                        ></div>
+                      </div>
+                      <span className="w-16 text-right text-sm font-bold text-slate-900 dark:text-white">{bar.value}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            {/* Side Panel: Messages & Alerts */}
+            {/* Side Panel: Alerts */}
             <div className="flex flex-col gap-6">
-
-              {/* --- MESSAGES WIDGET (Redirects to Chat) --- */}
-              <div className="flex flex-col rounded-xl bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm h-[200px]">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800/50 flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-green-500">chat</span>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Mensagens</h3>
-                  </div>
-                  {totalUnread > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">{totalUnread} novas</span>}
-                </div>
-
-                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-                  {totalUnread > 0 ? (
-                    <>
-                      <p className="text-slate-600 dark:text-slate-300 font-medium mb-1">Você tem mensagens não lidas!</p>
-                      <p className="text-slate-400 text-xs mb-3">Responda aos clientes e proprietários.</p>
-                    </>
-                  ) : (
-                    <p className="text-slate-400 text-sm">Nenhuma mensagem nova.</p>
-                  )}
-                  <button
-                    onClick={() => onNavigate('chat')}
-                    className="px-4 py-2 bg-slate-900 dark:bg-slate-700 text-white rounded-lg text-sm font-bold hover:bg-slate-800 dark:hover:bg-slate-600 transition-colors w-full"
-                  >
-                    Abrir Central de Chat
-                  </button>
-                </div>
-              </div>
 
               {/* Alert Section */}
               <div className="flex flex-col rounded-xl bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-800 shadow-sm flex-1">

@@ -77,23 +77,6 @@ export const createPaymentNotification = async (
     });
 };
 
-export const createLeadNotification = async (
-    userId: string,
-    leadName: string,
-    propertyTitle?: string
-) => {
-    await addNotification({
-        userId,
-        type: 'lead',
-        title: 'Novo Lead Capturado 🔥',
-        message: propertyTitle
-            ? `${leadName} demonstrou interesse em "${propertyTitle}".`
-            : `Novo lead: ${leadName} entrou em contato.`,
-        icon: 'person_add',
-        priority: 'high',
-    });
-};
-
 export const createPropertyNotification = async (
     userId: string,
     propertyTitle: string,

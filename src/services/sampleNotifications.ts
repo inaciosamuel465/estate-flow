@@ -1,7 +1,6 @@
 import {
     createContractNotification,
     createPropertyNotification,
-    createLeadNotification,
     createPaymentNotification,
     createSystemNotification
 } from '../src/services/notificationHelpers';
@@ -33,14 +32,6 @@ export const generateSampleNotifications = async () => {
             'Cobertura Moema - Duplex'
         );
     }, 1000);
-
-    // Notificação de novo lead
-    setTimeout(async () => {
-        await createLeadNotification(
-            'Maria Silva',
-            'Studio Centro - Mobiliado'
-        );
-    }, 1500);
 
     // Notificação de novo imóvel
     setTimeout(async () => {

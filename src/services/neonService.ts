@@ -1,5 +1,5 @@
 import { neon, neonConfig } from '@neondatabase/serverless';
-import { Property, Contract, User, Conversation, ChatMessage, AppNotification } from '../types';
+import { Property, Contract, User, AppNotification } from '../types';
 
 neonConfig.disableWarningInBrowsers = true;
 const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
@@ -217,6 +217,43 @@ export async function getContracts(): Promise<Contract[]> {
     })) as unknown as Contract[];
 }
 
+export async function getContractById(id: string): Promise<Contract | null> {
+    const result = await sql`
+        SELECT c.*, p.title as property_title, p.image as property_image,
+               u_client.name as client_name, u_client.phone as client_phone,
+               u_owner.name as owner_name, u_owner.phone as owner_phone
+        FROM contracts c
+        LEFT JOIN properties p ON c.property_id = p.id::text
+        LEFT JOIN users u_client ON c.client_id = u_client.id
+        LEFT JOIN users u_owner ON c.owner_id = u_owner.id
+        WHERE c.id = ${id}
+    `;
+    if (result.length === 0) return null;
+    const row = result[0];
+    return {
+        ...row,
+        propertyId: row.property_id,
+        propertyTitle: row.property_title || 'Imóvel',
+        propertyImage: row.property_image || '',
+        clientId: row.client_id,
+        clientName: row.client_name || 'Cliente',
+        clientPhone: row.client_phone || '',
+        ownerId: row.owner_id,
+        ownerName: row.owner_name || 'Proprietário',
+        ownerPhone: row.owner_phone || '',
+        commissionRate: Number(row.commission_rate),
+        dueDay: Number(row.due_day),
+        value: Number(row.value),
+        startDate: row.start_date,
+        endDate: row.end_date,
+        signatureStatus: row.signature_status || 'pending',
+        nextPaymentStatus: row.next_payment_status || 'pending',
+        templateType: row.template_type,
+        customContent: row.custom_content,
+        createdAt: row.created_at
+    } as unknown as Contract;
+}
+
 export async function addContract(contract: Contract): Promise<string> {
     const id = Math.random().toString(36).substr(2, 12);
     await sql`
@@ -322,6 +359,12 @@ export async function updateLeadStatus(id: string, status: Lead['status']): Prom
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function addNotification(notification: Omit<AppNotification, 'id' | 'timestamp' | 'read'> & { userId?: string }): Promise<void> {
+    await sql`
+        ALTER TABLE notifications 
+        ADD COLUMN IF NOT EXISTS action_url TEXT,
+        ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium',
+        ADD COLUMN IF NOT EXISTS icon TEXT
+    `;
     await sql`
         INSERT INTO notifications (user_id, type, title, message, action_url, icon, priority)
         VALUES (${notification.userId || null}, ${notification.type}, ${notification.title}, 
@@ -449,105 +492,6 @@ export async function getMarketingCampaigns(userId: string): Promise<any[]> {
         template: row.template,
         date: new Date(row.created_at).toLocaleDateString('pt-BR'),
     }));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CONVERSATIONS & MESSAGES
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function getConversations(userId: string): Promise<Conversation[]> {
-    let result;
-    if (userId === 'all') {
-        result = await sql`SELECT * FROM conversations ORDER BY last_update DESC`;
-    } else {
-        result = await sql`
-            SELECT * FROM conversations 
-            WHERE ${userId} = ANY(participants)
-            ORDER BY last_update DESC
-        `;
-    }
-
-    const conversations = await Promise.all(result.map(async (row) => {
-        // Fetch messages for this conversation
-        const msgs = await getMessages(row.id);
-        
-        return {
-            id: row.id,
-            userId: row.user_id,
-            userName: row.user_name,
-            userAvatar: row.user_avatar,
-            userRole: row.user_role,
-            lastMessage: row.last_message,
-            lastMessageTime: row.last_update ? new Date(row.last_update).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-            unreadCount: row.unread_count || 0,
-            messages: msgs
-        };
-    }));
-    
-    return conversations as unknown as Conversation[];
-}
-
-export async function getMessages(conversationId: string): Promise<ChatMessage[]> {
-    const result = await sql`
-        SELECT * FROM messages 
-        WHERE conversation_id = ${conversationId}
-        ORDER BY timestamp ASC
-    `;
-    return result.map(row => ({
-        id: row.id,
-        sender: row.sender_id === 'agent' ? 'agent' : 'user',
-        text: row.text,
-        time: new Date(row.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        read: row.read || false,
-        attachment: row.attachment ? JSON.parse(row.attachment) : undefined
-    })) as unknown as ChatMessage[];
-}
-
-export async function markConversationAsRead(conversationId: string): Promise<void> {
-    try {
-        await sql`UPDATE conversations SET unread_count = 0 WHERE id = ${conversationId}`;
-    } catch (e) {
-        console.error('Error marking conversation as read:', e);
-    }
-}
-
-export async function saveMessage(conversationId: string, message: ChatMessage, conversationData?: Partial<Conversation>): Promise<void> {
-    const timestamp = new Date().toISOString();
-    
-    // Ensure conversation exists
-    if (conversationData) {
-        const participants = [String(conversationData.userId), 'agent'];
-        await sql`
-            INSERT INTO conversations (id, user_id, user_name, user_avatar, user_role, last_message, last_update, unread_count, participants)
-            VALUES (${conversationId}, ${conversationData.userId || 0}, ${conversationData.userName}, 
-                    ${conversationData.userAvatar}, ${conversationData.userRole}, ${message.text}, 
-                    ${timestamp}, ${message.sender === 'user' ? 1 : 0}, ${participants})
-            ON CONFLICT (id) DO UPDATE SET
-                last_message = EXCLUDED.last_message,
-                last_update = EXCLUDED.last_update,
-                unread_count = CASE 
-                    WHEN EXCLUDED.unread_count > 0 THEN conversations.unread_count + EXCLUDED.unread_count
-                    ELSE conversations.unread_count
-                END
-        `;
-    }
-
-    await sql`
-        INSERT INTO messages (conversation_id, sender_id, text, timestamp, attachment)
-        VALUES (${conversationId}, ${message.sender}, ${message.text}, ${timestamp}, 
-                ${message.attachment ? JSON.stringify(message.attachment) : null})
-    `;
-    
-    // Update last message in conversation if not already updated by upsert
-    if (!conversationData) {
-        await sql`
-            UPDATE conversations 
-            SET last_message = ${message.text}, 
-                last_update = ${timestamp},
-                unread_count = CASE WHEN ${message.sender} = 'user' THEN unread_count + 1 ELSE unread_count END
-            WHERE id = ${conversationId}
-        `;
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

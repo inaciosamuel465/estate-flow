@@ -53,7 +53,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
     // Edit form
     const [editForm, setEditForm] = useState({
         name: '', email: '', phone: '', document: '', address: '',
-        role: 'visitor' as User['role'], password: '',
+        role: 'visitor' as User['role'], password: '', avatar: '',
     });
 
     const showFeedback = (type: 'success' | 'error', message: string) => {
@@ -105,7 +105,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
         setEditForm({
             name: user.name, email: user.email, phone: user.phone || '',
             document: (user as any).document || '', address: (user as any).address || '',
-            role: user.role, password: '',
+            role: user.role, password: '', avatar: user.avatar || '',
         });
         setShowEditModal(true);
     };
@@ -120,6 +120,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
         (updateData as any).phone = editForm.phone;
         (updateData as any).document = editForm.document;
         (updateData as any).address = editForm.address;
+        (updateData as any).avatar = editForm.avatar;
         if (editForm.password) (updateData as any).password = editForm.password;
 
         const success = await onUpdateUser?.(editingUser.id, updateData);
@@ -147,12 +148,16 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
 
     const handleResendCredentials = async (user: User) => {
         const newPwd = generatePassword();
-        const success = await onSendCredentials?.(user, newPwd);
-        if (success) {
-            await onUpdateUser?.(user.id, { ...user, password: newPwd } as any);
-            showFeedback('success', `Credenciais enviadas para ${user.email}`);
+        const emailSent = await onSendCredentials?.(user, newPwd);
+        if (emailSent) {
+            const updated = await onUpdateUser?.(user.id, { ...user, password: newPwd } as any);
+            if (updated) {
+                showFeedback('success', `Nova senha gerada e enviada para ${user.email}`);
+            } else {
+                showFeedback('error', 'E-mail enviado, mas falha ao salvar a nova senha no banco.');
+            }
         } else {
-            showFeedback('error', 'Erro ao enviar email.');
+            showFeedback('error', 'Erro ao enviar e-mail. Verifique as configurações de SMTP.');
         }
     };
 
@@ -416,6 +421,11 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Endereço</label>
                                     <input type="text" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })}
                                         className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">Avatar URL</label>
+                                    <input type="text" value={editForm.avatar} onChange={e => setEditForm({ ...editForm, avatar: e.target.value })}
+                                        className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-primary" placeholder="https://..." />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-1">Permissão</label>

@@ -10,7 +10,6 @@ import ImageStudio from './pages/ImageStudio';
 import AreaSimulation from './pages/AreaSimulation';
 import ListingsManagement from './pages/ListingsManagement';
 import FinancialManagement from './pages/FinancialManagement';
-import ChatManagement from './pages/ChatManagement';
 import MarketingStudio from './pages/MarketingStudio';
 import ContractsPage from './pages/ContractsPage';
 import Analytics from './pages/Analytics';
@@ -19,6 +18,7 @@ import UsersManagement from './pages/UsersManagement';
 import AdminSettings from './pages/AdminSettings';
 import NotificationCenter from './components/NotificationCenter';
 import WhatsAppButton from './components/WhatsAppButton';
+import PublicContractSign from './pages/PublicContractSign';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { NotificationProvider } from './src/contexts/NotificationContext';
 
@@ -37,9 +37,6 @@ import {
   deleteContract,
   updateContract as updateContractService,
   toggleFavorite,
-  saveMessage,
-  subscribeToConversations,
-  markConversationAsRead,
   subscribeToNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
@@ -49,8 +46,6 @@ import {
 } from './src/services/dataService';
 import LoginPage, { RegisterData } from './pages/LoginPage';
 import ClientHome from './pages/ClientHome';
-import ClientChat from './pages/ClientChat';
-import LegalChat from './pages/LegalChat';
 import OwnerLanding from './pages/OwnerLanding';
 import UserDashboard from './pages/UserDashboard';
 import ProfileSettings from './pages/ProfileSettings';
@@ -63,14 +58,13 @@ import {
 import {
   createContractNotification,
   createPropertyNotification,
-  createLeadNotification,
   registerServiceWorker,
   requestNotificationPermission
 } from './src/services/notificationHelpers';
 import ReactPlayer from 'react-player';
 
 // --- Types ---
-import { ChatMessage, Conversation, User, Property, Contract, AppNotification } from './src/types';
+import { User, Property, Contract, AppNotification } from './src/types';
 export { AppErrorBoundary } from './components/AppErrorBoundary';
 
 // Wrapper de Scroll
@@ -116,10 +110,6 @@ const App: React.FC = () => {
       setCurrentUser(user);
     });
 
-    const unsubscribeChat = subscribeToConversations((convs) => {
-      setConversations(convs);
-    });
-
     const unsubscribeNotifications = subscribeToNotifications((notifs) => {
       setNotifications(notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     });
@@ -148,7 +138,6 @@ const App: React.FC = () => {
 
     return () => {
       unsubscribeAuth();
-      unsubscribeChat();
       unsubscribeNotifications();
     };
   }, []);
@@ -161,9 +150,6 @@ const App: React.FC = () => {
       document.documentElement.style.setProperty('--color-primary', '#4f46e5'); // Fallback indigo
     }
   }, [settings.primaryColor]);
-
-  // --- Chat State (Replaces simple messages array) ---
-  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   // --- Notifications State ---
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -179,6 +165,7 @@ const App: React.FC = () => {
     if (p === '/login') return 'login';
     if (p === '/advertise') return 'advertise';
     if (p === '/dashboard') return 'user-dashboard';
+    if (p.startsWith('/contrato/')) return 'public-contract';
     if (p.startsWith('/admin')) {
       if (p === '/admin/dashboard') return 'dashboard';
       if (p === '/admin/listings') return 'all-listings';
@@ -186,7 +173,6 @@ const App: React.FC = () => {
       if (p === '/admin/listing/edit') return 'edit-listing';
       if (p === '/admin/financial') return 'financial';
       if (p === '/admin/contracts') return 'contracts';
-      if (p === '/admin/chat') return 'chat';
       if (p === '/admin/marketing') return 'marketing';
       if (p === '/admin/map') return 'map';
       if (p === '/admin/crm') return 'crm';
@@ -208,6 +194,12 @@ const App: React.FC = () => {
     return null;
   }, [location.pathname]);
 
+  const selectedContractId = React.useMemo(() => {
+    const p = location.pathname;
+    if (p.startsWith('/contrato/')) return p.split('/')[2];
+    return null;
+  }, [location.pathname]);
+
   const setCurrentView = (view: string) => {
     const viewMap: Record<string, string> = {
       'dashboard': '/admin/dashboard',
@@ -216,7 +208,6 @@ const App: React.FC = () => {
       'edit-listing': '/admin/listing/edit',
       'financial': '/admin/financial',
       'contracts': '/admin/contracts',
-      'chat': '/admin/chat',
       'marketing': '/admin/marketing',
       'map': '/admin/map',
       'crm': '/admin/crm',
@@ -275,14 +266,6 @@ const App: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [contracts, currentUser, notifications]);
-
-  // --- Client Chat Modal State ---
-  const [isClientChatOpen, setIsClientChatOpen] = useState(false);
-  const [clientChatPropertyTitle, setClientChatPropertyTitle] = useState('');
-
-  // --- Legal Chat State ---
-  const [activeLegalContract, setActiveLegalContract] = useState<Contract | null>(null);
-  const [isLegalChatOpen, setIsLegalChatOpen] = useState(false);
 
   // Deep linking is now natively handled by React Router via location.pathname and currentView / selectedPropertyId derivations
 
@@ -380,7 +363,6 @@ const App: React.FC = () => {
     await logoutUser();
     setCurrentUser(null);
     setCurrentView('home');
-    setIsClientChatOpen(false);
     setIsMobileMenuOpen(false);
   };
 
@@ -452,16 +434,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleClientChatStart = (title: string) => {
-    if (!currentUser) {
-      alert("Você precisa fazer login para iniciar um chat.");
-      setCurrentView('login');
-      return;
-    }
-    setClientChatPropertyTitle(title);
-    setIsClientChatOpen(true);
-  };
-
   const handleFavoriteAction = async (id: number | string) => {
     if (!currentUser) {
       alert("Você precisa fazer login para favoritar imóveis.");
@@ -492,120 +464,12 @@ const App: React.FC = () => {
           : c
       ));
 
-      if (activeLegalContract && String(activeLegalContract.id) === String(contractId)) {
-        setActiveLegalContract(prev => prev ? { ...prev, signatureStatus: 'signed' as const, signatureImage, signedAt: new Date().toISOString() } : null);
-      }
-
     } catch (error) {
       console.error("Erro ao salvar assinatura:", error);
       alert("Houve um erro ao processar sua assinatura. Tente novamente.");
     }
   };
 
-
-  // --- Centralized Message Handler ---
-  const handleSendMessage = async (text: string, sender: 'user' | 'agent', conversationIdOrUserId?: number | string, attachment?: ChatMessage['attachment']) => {
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newMessage: ChatMessage = {
-      id: Date.now(),
-      sender,
-      text,
-      time,
-      read: sender === 'agent',
-      attachment
-    };
-
-    // Identificar ID da conversa (sempre string)
-    // Se conversationIdOrUserId começar com 'legal_', é um chat de contrato.
-    // Senão, é o ID do usuário (chat de atendimento geral).
-    let conversationId = "";
-    let targetUserId: string | number = "anonymous";
-    let isLegal = false;
-
-    if (typeof conversationIdOrUserId === 'string' && conversationIdOrUserId.startsWith('legal_')) {
-      conversationId = conversationIdOrUserId;
-      isLegal = true;
-    } else {
-      targetUserId = conversationIdOrUserId || currentUser?.id || "anonymous";
-      conversationId = String(targetUserId);
-    }
-
-    // Preparar dados da conversa para update/create
-    const targetUser = users.find(u => String(u.id) === String(targetUserId));
-
-    const conversationData: Partial<Conversation> = {
-      userId: isLegal ? "0" : String(targetUserId),
-      id: conversationId,
-      userName: isLegal ? `Jurídico: ${text.substring(0, 20)}...` : (targetUser?.name || currentUser?.name || "Usuário"),
-      userAvatar: isLegal ? "https://cdn-icons-png.flaticon.com/512/921/921347.png" : (targetUser?.avatar || currentUser?.avatar || "https://ui-avatars.com/api/?name=User"),
-      userRole: isLegal ? 'client' : (targetUser?.role || currentUser?.role || 'client' as any),
-      lastMessage: attachment ? `[Anexo: ${attachment.title}]` : text,
-      lastMessageTime: time,
-      unreadCount: sender === 'user' ? 1 : 0
-    };
-
-    // Especial check para conversa jurídica: se já existir, mantemos o nome/avatar original ou atualizamos
-    const existingConv = conversations.find(c => c.id === conversationId);
-    if (isLegal && existingConv) {
-      conversationData.userName = existingConv.userName;
-      conversationData.userAvatar = existingConv.userAvatar;
-    } else if (isLegal) {
-      // Tentar obter o título do contrato para o nome da conversa
-      const contractIdAttr = conversationId.replace('legal_', '');
-      const contract = contracts.find(c => String(c.id) === contractIdAttr);
-      if (contract) {
-        conversationData.userName = `Canal Jurídico: ${contract.propertyTitle}`;
-      }
-    }
-
-    // Atualização Otimista da UI
-    setConversations(prev => {
-      const exists = prev.find(c => c.id === conversationId);
-      if (exists) {
-        return prev.map(c => c.id === conversationId ? {
-          ...c,
-          lastMessage: conversationData.lastMessage || text,
-          lastMessageTime: time,
-          unreadCount: sender === 'user' ? (c.unreadCount + 1) : c.unreadCount,
-          messages: [...(c.messages || []), newMessage]
-        } : c);
-      } else {
-        return [{
-          ...conversationData,
-          id: conversationId,
-          messages: [newMessage]
-        } as Conversation, ...prev];
-      }
-    });
-
-    // Salvar no Firebase (Optimistic update on UI via subscription will eventually sync)
-    await saveMessage(conversationId, newMessage, conversationData);
-
-    // Create notification for new user messages (leads)
-    if (sender === 'user' && currentUser?.role !== 'admin' && !isLegal) {
-      await createLeadNotification(
-        conversationData.userName || 'Usuário',
-        clientChatPropertyTitle || undefined
-      );
-    }
-  };
-
-  const handleMarkAsRead = async (conversationId: number | string) => {
-    // Atualização Otimista
-    setConversations(prev => prev.map(c =>
-      c.id === conversationId ? { ...c, unreadCount: 0 } : c
-    ));
-    // Persistência
-    await markConversationAsRead(String(conversationId));
-  };
-
-  // Helper para obter mensagens da conversa ativa do cliente logado
-  const getCurrentUserMessages = () => {
-    if (!currentUser) return [];
-    // Comparação frouxa (string vs number) pois IDs do FB são string e mock são number
-    const conv = conversations.find(c => String(c.userId) === String(currentUser.id));
-    return conv ? conv.messages : [];
-  };
 
   // --- Notification Handlers ---
   const handleMarkNotificationAsRead = async (id: string | number) => {
@@ -661,7 +525,6 @@ const App: React.FC = () => {
         case 'dashboard': return (
           <AdminDashboard
             onNavigate={setCurrentView}
-            conversations={conversations}
             properties={properties}
             contracts={contracts}
             currentUser={currentUser}
@@ -705,34 +568,6 @@ const App: React.FC = () => {
             onAddContract={handleAddContract}
             onDeleteContract={handleDeleteContract}
             onUpdateContract={handleUpdateContract}
-            onOpenLegalChat={(contract) => {
-              setActiveLegalContract(contract);
-              setIsLegalChatOpen(true);
-            }}
-            onShareContractToChat={(contract) => {
-              handleSendMessage(
-                `Encaminhei o contrato de ${contract.type === 'rent' ? 'locação' : 'venda'} para sua conferência.`,
-                'agent',
-                `legal_${contract.id}`,
-                {
-                  type: 'contract',
-                  id: contract.id,
-                  title: `Contrato: ${contract.propertyTitle}`,
-                  status: contract.status
-                }
-              );
-              setActiveLegalContract(contract);
-              setIsLegalChatOpen(true);
-            }}
-          />
-        );
-        case 'chat': return (
-          <ChatManagement
-            conversations={conversations}
-            contracts={contracts}
-            users={users}
-            onSendMessage={handleSendMessage}
-            onMarkAsRead={handleMarkAsRead}
           />
         );
         case 'marketing': return (
@@ -785,6 +620,7 @@ const App: React.FC = () => {
           <AdminSettings
             settings={settings}
             onSettingsUpdated={setSettings}
+            users={users}
           />
         );
         case 'users': return (
@@ -852,7 +688,6 @@ const App: React.FC = () => {
                   <MobileAdminNavButton active={currentView === 'dashboard'} onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} icon="dashboard" label="Home" />
                   <MobileAdminNavButton active={currentView === 'all-listings'} onClick={() => { setCurrentView('all-listings'); setIsMobileMenuOpen(false); }} icon="inventory_2" label="Imóveis" />
                   <MobileAdminNavButton active={currentView === 'contracts'} onClick={() => { setCurrentView('contracts'); setIsMobileMenuOpen(false); }} icon="gavel" label="Jurídico" />
-                  <MobileAdminNavButton active={currentView === 'chat'} onClick={() => { setCurrentView('chat'); setIsMobileMenuOpen(false); }} icon="chat" label="Mensagens" />
                   <MobileAdminNavButton active={currentView === 'marketing'} onClick={() => { setCurrentView('marketing'); setIsMobileMenuOpen(false); }} icon="campaign" label="Marketing" />
                   <MobileAdminNavButton active={currentView === 'ai-analytics'} onClick={() => { setCurrentView('ai-analytics'); setIsMobileMenuOpen(false); }} icon="psychology" label="IA Analytics" />
                   <MobileAdminNavButton active={currentView === 'financial'} onClick={() => { setCurrentView('financial'); setIsMobileMenuOpen(false); }} icon="payments" label="Financeiro" />
@@ -863,7 +698,7 @@ const App: React.FC = () => {
 
               <div className="mt-4 pt-6 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-full bg-cover bg-center border border-slate-200" style={{ backgroundImage: `url("${currentUser.avatar}")` }}></div>
+                  <div className="size-10 rounded-full bg-cover bg-center border border-slate-200" style={{ backgroundImage: currentUser.avatar ? `url("${currentUser.avatar}")` : 'none' }}></div>
                   <div>
                     <p className="font-bold text-sm text-slate-900 dark:text-white">{currentUser.name}</p>
                     <button onClick={() => { setCurrentView('profile-settings'); setIsMobileMenuOpen(false); }} className="text-xs text-primary font-bold">Ver Perfil</button>
@@ -907,7 +742,6 @@ const App: React.FC = () => {
             <NavButton active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} icon="dashboard" tooltip="Painel Administrativo" />
             <NavButton active={currentView === 'all-listings' || currentView === 'edit-listing'} onClick={() => setCurrentView('all-listings')} icon="inventory_2" tooltip="Meus Anúncios" />
             <NavButton active={currentView === 'contracts'} onClick={() => setCurrentView('contracts')} icon="gavel" tooltip="Canal Jurídico & Contratos" />
-            <NavButton active={currentView === 'chat'} onClick={() => setCurrentView('chat')} icon="chat" tooltip="Chat & Atendimento" />
             <NavButton active={currentView === 'marketing'} onClick={() => setCurrentView('marketing')} icon="campaign" tooltip="Marketing Studio" />
             <NavButton active={currentView === 'ai-analytics'} onClick={() => setCurrentView('ai-analytics')} icon="psychology" tooltip="IA Analytics & Leads" />
             <NavButton active={currentView === 'financial'} onClick={() => setCurrentView('financial')} icon="payments" tooltip="Financeiro" />
@@ -933,17 +767,6 @@ const App: React.FC = () => {
           {renderAdminView()}
         </div>
 
-        {/* Global Modals for Admin */}
-        {isLegalChatOpen && activeLegalContract && (
-          <LegalChat
-            contract={activeLegalContract}
-            currentUser={currentUser!}
-            messages={conversations.find(c => c.id === `legal_${activeLegalContract.id}`)?.messages || []}
-            onSendMessage={(text, sender, attachment) => handleSendMessage(text, sender, `legal_${activeLegalContract.id}`, attachment)}
-            onSignContract={handleSignContractReal}
-            onClose={() => setIsLegalChatOpen(false)}
-          />
-        )}
       </div>
       </NotificationProvider>
     );
@@ -1003,21 +826,7 @@ const App: React.FC = () => {
             onLogout={handleLogout}
             onEditProfile={() => setCurrentView('profile-settings')}
             onUpdateContract={handleUpdateContract}
-            onOpenLegalChat={(contract) => {
-              setActiveLegalContract(contract);
-              setIsLegalChatOpen(true);
-            }}
           />
-          {isLegalChatOpen && activeLegalContract && (
-            <LegalChat
-              contract={activeLegalContract}
-              currentUser={currentUser}
-              messages={conversations.find(c => c.id === `legal_${activeLegalContract.id}`)?.messages || []}
-              onSendMessage={(text, sender, attachment) => handleSendMessage(text, sender, `legal_${activeLegalContract.id}`, attachment)}
-              onSignContract={handleSignContractReal}
-              onClose={() => setIsLegalChatOpen(false)}
-            />
-          )}
         </PublicLayout>
       </NotificationProvider>
     );
@@ -1056,18 +865,9 @@ const App: React.FC = () => {
             properties={properties}
             onBack={() => setCurrentView('home')}
             isPublic={true}
-            onChatStart={handleClientChatStart}
             currentUser={currentUser}
             settings={settings}
           />
-          {isClientChatOpen && (
-            <ClientChat
-              propertyTitle={clientChatPropertyTitle}
-              onClose={() => setIsClientChatOpen(false)}
-              messages={getCurrentUserMessages()}
-              onSendMessage={(text) => handleSendMessage(text, 'user')}
-            />
-          )}
           <WhatsAppButton
             phoneNumber="5515997241175"
             propertyTitle={properties.find(p => p.id === selectedPropertyId)?.title}
@@ -1075,6 +875,11 @@ const App: React.FC = () => {
         </PublicLayout>
       </NotificationProvider>
     );
+  }
+
+  // 3. Public Contract View for Signing
+  if (currentView === 'public-contract' && selectedContractId) {
+    return <PublicContractSign contractId={selectedContractId} settings={settings} />;
   }
 
   // Default: Home Page
@@ -1095,32 +900,13 @@ const App: React.FC = () => {
           onUserDashboardClick={() => setCurrentView('user-dashboard')}
           onLogoutClick={handleLogout}
           onFavoriteClick={handleFavoriteAction}
-          onChatClick={handleClientChatStart}
           settings={settings}
         />
-        {isClientChatOpen && (
-          <ClientChat
-            propertyTitle={clientChatPropertyTitle || "Atendimento Geral"}
-            onClose={() => setIsClientChatOpen(false)}
-            messages={getCurrentUserMessages()}
-            onSendMessage={(text) => handleSendMessage(text, 'user')}
-          />
-        )}
         <WhatsAppButton phoneNumber="5515997241175" />
         {/* Teste de Sincronização */}
         <div className="fixed bottom-4 left-4 z-[100] bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg opacity-80 pointer-events-none">
           v1.0.1 - SYNC ACTIVE
         </div>
-        {isLegalChatOpen && activeLegalContract && (
-          <LegalChat
-            contract={activeLegalContract}
-            currentUser={currentUser!}
-            messages={conversations.find(c => c.id === `legal_${activeLegalContract.id}`)?.messages || []}
-            onSendMessage={(text, sender, attachment) => handleSendMessage(text, sender, `legal_${activeLegalContract.id}`, attachment)}
-            onSignContract={handleSignContractReal}
-            onClose={() => setIsLegalChatOpen(false)}
-          />
-        )}
       </PublicLayout>
     </NotificationProvider>
   );

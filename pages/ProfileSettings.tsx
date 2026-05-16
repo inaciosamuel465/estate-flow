@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User } from '../src/types';
 
 interface ProfileSettingsProps {
@@ -18,10 +18,21 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
     });
     const [isSaving, setIsSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setFormData(prev => ({ ...prev, avatar: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -61,11 +72,21 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
                                 <div className="relative group">
                                     <div
                                         className="size-32 rounded-full bg-slate-200 bg-cover bg-center border-4 border-white shadow-lg transition-transform group-hover:scale-105"
-                                        style={{ backgroundImage: `url("${formData.avatar || user.avatar}")` }}
+                                        style={{ backgroundImage: formData.avatar ? `url("${formData.avatar}")` : 'none' }}
                                     ></div>
-                                    <div className="absolute inset-0 bg-black/20 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+                                    <div
+                                        className="absolute inset-0 bg-black/20 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
                                         <span className="material-symbols-outlined text-white text-3xl">photo_camera</span>
                                     </div>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleAvatarUpload}
+                                    />
                                 </div>
                                 <div className="flex-1 text-center md:text-left">
                                     <h2 className="text-2xl font-bold text-slate-900 mb-1">{formData.name}</h2>
@@ -76,7 +97,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
                                             value={formData.avatar}
                                             onChange={handleChange}
                                             placeholder="URL da Imagem de Perfil"
-                                            className="w-full max-w-xs px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all shadow-sm"
+                                            className="w-full max-w-xs px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all shadow-sm"
                                         />
                                     </div>
                                 </div>
