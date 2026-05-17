@@ -133,17 +133,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         </div>
       `;
 
-      const smtpHost = process.env.SMTP_HOST;
-      if (smtpHost) {
+      // SMTP config: try company settings first, fallback to env
+      let smtpConfig: { host: string; port: number; secure: boolean; user: string; pass: string; senderName: string; senderEmail: string } | null = null;
+      try {
+        const cs = await sql`SELECT smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password, email_sender_name, email_sender_address FROM company_settings WHERE company_id = ${company_id} LIMIT 1`;
+        const s = cs[0];
+        if (s?.smtp_host && s?.smtp_user && s?.smtp_password) {
+          smtpConfig = {
+            host: s.smtp_host,
+            port: Number(s.smtp_port) || 587,
+            secure: s.smtp_secure === true,
+            user: s.smtp_user,
+            pass: s.smtp_password,
+            senderName: s.email_sender_name || 'EstateFlow',
+            senderEmail: s.email_sender_address || s.smtp_user,
+          };
+        }
+      } catch (_) { /* fall through */ }
+
+      const config = smtpConfig || (process.env.SMTP_HOST ? {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        user: process.env.SMTP_USER || '',
+        pass: process.env.SMTP_PASS || '',
+        senderName: 'EstateFlow Suite',
+        senderEmail: process.env.SMTP_USER || '',
+      } : null);
+
+      if (config) {
         const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: parseInt(process.env.SMTP_PORT || '587'),
-          secure: process.env.SMTP_SECURE === 'true',
-          auth: { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || '' },
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          auth: { user: config.user, pass: config.pass },
           tls: { rejectUnauthorized: false },
         });
         const info = await transporter.sendMail({
-          from: `"EstateFlow" <${process.env.SMTP_USER || 'noreply@estateflow.com'}>`,
+          from: `"${config.senderName}" <${config.senderEmail}>`,
           to, subject, html,
         });
         console.log(`[BILLING EMAIL] Sent to ${to}, messageId: ${info.messageId}`);

@@ -1,12 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+interface VisibleCompany {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  primary_color?: string;
+  hero_video_url?: string;
+}
 
 const SaasHome: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ company_name: '', admin_name: '', admin_email: '', phone: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [companies, setCompanies] = useState<VisibleCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
   const lastTenantSlug = localStorage.getItem('estateflow_last_slug');
   const loginHref = lastTenantSlug ? `/${lastTenantSlug}/login` : '/';
+
+  useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+        const [rows, globalSettings] = await Promise.all([
+          sql`
+            SELECT c.id, c.name, c.slug, c.logo_url, c.primary_color, cs.hero_video_url
+            FROM companies c
+            LEFT JOIN company_settings cs ON cs.company_id = c.id
+            WHERE c.visible = true AND c.status = 'active'
+            ORDER BY c.name ASC
+          `,
+          sql`SELECT value FROM system_settings WHERE key = 'heroVideoUrl' LIMIT 1`
+        ]);
+        const globalHeroUrl = (globalSettings[0] as any)?.value || null;
+        const merged = (rows as any[]).map(r => ({
+          ...r,
+          hero_video_url: r.hero_video_url || globalHeroUrl
+        }));
+        setCompanies(merged as VisibleCompany[]);
+        setCompanies(rows as VisibleCompany[]);
+      } catch (err) {
+        console.error('Erro ao carregar imobiliárias:', err);
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+    loadCompanies();
+  }, []);
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,12 +84,12 @@ const SaasHome: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       {/* Navbar */}
       <header className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-100/80">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="size-9 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
+            <div className="size-9 bg-gradient-to-br from-primary to-blue-700 rounded-xl flex items-center justify-center shadow-lg shadow-primary/30">
               <span className="text-white font-black text-sm tracking-tight">EF</span>
             </div>
             <span className="font-extrabold text-slate-800 text-lg tracking-tight">EstateFlow</span>
@@ -55,7 +97,7 @@ const SaasHome: React.FC = () => {
           <div className="flex items-center gap-2">
             <a href="/master" className="text-sm text-slate-400 hover:text-slate-700 font-semibold px-3 py-2 transition-colors">Master</a>
             <a href={loginHref} className="text-sm text-slate-400 hover:text-slate-700 font-semibold px-3 py-2 transition-colors">Entrar</a>
-            <button onClick={() => setShowForm(true)} className="ml-1 px-5 py-2.5 bg-primary hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/25 active:scale-[0.97]">
+            <button onClick={() => setShowForm(true)} className="ml-1 px-5 py-2.5 bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/25 active:scale-[0.97]">
               Criar Imobiliária
             </button>
           </div>
@@ -64,8 +106,13 @@ const SaasHome: React.FC = () => {
 
       {/* Hero Section */}
       <section className="relative max-w-7xl mx-auto px-6 pt-12 md:pt-16 pb-20 md:pb-28">
+        {/* Background decorative elements */}
+        <div className="absolute top-20 left-0 w-72 h-72 bg-primary/5 rounded-full blur-3xl -z-10"></div>
+        <div className="absolute bottom-0 right-10 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl -z-10"></div>
+        <div className="absolute top-40 right-1/4 w-48 h-48 bg-purple-500/5 rounded-full blur-3xl -z-10"></div>
+
         {/* Floating Badge */}
-        <div className="absolute top-6 right-6 md:top-8 md:right-8 hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100/80 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm">
+        <div className="absolute top-6 right-6 md:top-8 md:right-8 hidden md:flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
           <span className="size-5 bg-emerald-500 rounded-full flex items-center justify-center">
             <span className="material-symbols-outlined text-white text-sm" style={{ fontSize: '14px' }}>check</span>
           </span>
@@ -76,26 +123,26 @@ const SaasHome: React.FC = () => {
           {/* Left Column */}
           <div className="flex-1 lg:max-w-[54%]">
             {/* Mobile Badge */}
-            <div className="md:hidden flex items-center gap-2 px-3.5 py-1.5 bg-slate-100 rounded-full border border-slate-200 mb-6 w-fit">
+            <div className="md:hidden flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-full mb-6 w-fit animate-in fade-in slide-in-from-left-4 duration-500">
               <span className="size-4 bg-emerald-500 rounded-full flex items-center justify-center">
                 <span className="material-symbols-outlined text-white text-xs" style={{ fontSize: '11px' }}>check</span>
               </span>
               <span className="text-[11px] font-bold text-slate-600">100% Online, Seguro e em Nuvem</span>
             </div>
 
-            <h1 className="text-[2.5rem] md:text-[3.25rem] lg:text-[3.75rem] font-extrabold text-slate-900 leading-[1.08] tracking-tight mb-5">
+            <h1 className="text-[2.5rem] md:text-[3.25rem] lg:text-[3.75rem] font-extrabold text-slate-900 leading-[1.08] tracking-tight mb-5 animate-in fade-in slide-in-from-bottom-4 duration-700">
               Um sistema completo para imobiliárias que querem{' '}
               <span className="text-primary relative">vender mais
                 <span className="absolute -bottom-1 left-0 right-0 h-3 bg-blue-100/60 -z-10 rounded-full blur-sm"></span>
               </span>
             </h1>
 
-            <p className="text-base md:text-lg text-slate-500 leading-relaxed max-w-xl mb-8">
+            <p className="text-base md:text-lg text-slate-500 leading-relaxed max-w-xl mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-75">
               Gestão de imóveis, clientes, contratos, financeiro e muito mais em um só lugar. Simples, rápido e eficiente.
             </p>
 
-            <div className="flex items-center gap-3 mb-12">
-              <button onClick={() => setShowForm(true)} className="px-7 py-3.5 bg-primary hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-xl shadow-primary/25 active:scale-[0.97]">
+            <div className="flex items-center gap-3 mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+              <button onClick={() => setShowForm(true)} className="px-7 py-3.5 bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-bold text-sm transition-all shadow-xl shadow-primary/25 active:scale-[0.97]">
                 Criar Imobiliária
               </button>
               <a href="/plans" className="px-7 py-3.5 border border-slate-200 hover:border-slate-300 bg-white text-slate-700 rounded-xl font-bold text-sm transition-all shadow-sm active:scale-[0.97]">
@@ -111,8 +158,8 @@ const SaasHome: React.FC = () => {
                 { icon: 'tune', title: 'Mais Controle', desc: 'Painel completo com indicadores em tempo real', iconBg: 'bg-purple-50', iconColor: 'text-purple-600' },
                 { icon: 'support_agent', title: 'Suporte', desc: 'Equipe especializada sempre pronta para ajudar', iconBg: 'bg-amber-50', iconColor: 'text-amber-600' },
               ].map((item, i) => (
-                <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-md hover:border-slate-200 transition-all duration-300 group">
-                  <div className={`size-10 rounded-xl ${item.iconBg} flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-lg hover:border-slate-200 hover:-translate-y-0.5 transition-all duration-300 group">
+                  <div className={`size-10 rounded-xl ${item.iconBg} flex items-center justify-center mb-3 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}>
                     <span className={`material-symbols-outlined text-xl ${item.iconColor}`}>{item.icon}</span>
                   </div>
                   <h3 className="font-extrabold text-slate-800 text-sm mb-0.5">{item.title}</h3>
@@ -139,7 +186,7 @@ const SaasHome: React.FC = () => {
                       <div className="flex h-full">
                         {/* Sidebar */}
                         <div className="w-12 bg-slate-900 flex flex-col items-center py-3 gap-3 shrink-0">
-                          <div className="size-5 bg-primary rounded-md flex items-center justify-center">
+                          <div className="size-5 bg-gradient-to-br from-primary to-blue-700 rounded-md flex items-center justify-center">
                             <span className="text-white text-[9px] font-black">EF</span>
                           </div>
                           <div className="size-5 bg-slate-700/50 rounded-lg flex items-center justify-center">
@@ -209,12 +256,12 @@ const SaasHome: React.FC = () => {
                               <div className="flex-1 flex items-end gap-1">
                                 {[35, 55, 42, 78, 62, 90, 75, 85, 60, 45, 70, 95].map((h, i) => (
                                   <div key={i} className="flex-1 bg-primary/20 rounded-t-sm relative overflow-hidden" style={{ height: `${h}%` }}>
-                                    <div className="absolute bottom-0 inset-x-0 bg-primary rounded-t-sm" style={{ height: '60%' }}></div>
+                                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-primary to-primary/60 rounded-t-sm" style={{ height: '60%' }}></div>
                                   </div>
                                 ))}
                               </div>
                             </div>
-                            <div className="w-20 bg-indigo-50 rounded-lg p-2 flex flex-col">
+                            <div className="w-20 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-2 flex flex-col">
                               <p className="text-[7px] font-bold text-indigo-600 mb-1">Leads</p>
                               <p className="text-[16px] font-black text-indigo-600 leading-none">423</p>
                               <p className="text-[6px] text-indigo-400 mt-auto">+23% esse mês</p>
@@ -301,7 +348,7 @@ const SaasHome: React.FC = () => {
                                 <p className="text-[8px] font-bold text-slate-800">{prop.title}</p>
                                 <p className="text-[9px] font-black text-primary">{prop.price}</p>
                               </div>
-                              <div className="px-2.5 py-1 bg-primary rounded-md shadow-sm">
+                              <div className="px-2.5 py-1 bg-gradient-to-r from-primary to-blue-700 rounded-md shadow-sm">
                                 <span className="text-[7px] font-black text-white">{prop.type}</span>
                               </div>
                             </div>
@@ -327,6 +374,116 @@ const SaasHome: React.FC = () => {
         </div>
       </section>
 
+      {/* Imobiliárias Disponíveis */}
+      {!companiesLoading && companies.length > 0 && (
+        <section className="py-20 md:py-28 px-6 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl -z-10"></div>
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-50 rounded-full border border-emerald-200 mb-5">
+                <span className="material-symbols-outlined text-emerald-600 text-sm">storefront</span>
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Imobiliárias</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-3 tracking-tight">Imobiliárias que já confiam</h2>
+              <p className="text-slate-500 text-base md:text-lg max-w-xl mx-auto">
+                Conheça algumas das imobiliárias que utilizam o EstateFlow para gerenciar seus negócios
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {companies.map((c, i) => {
+                const color = c.primary_color || '#2b6cee';
+                const initial = c.name.charAt(0).toUpperCase();
+
+                const youtubeId = (() => {
+                  const url = c.hero_video_url;
+                  if (!url) return null;
+                  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+                  if (m) return m[1];
+                  const d = url.match(/^([a-zA-Z0-9_-]{11})$/);
+                  return d ? d[1] : null;
+                })();
+
+                const thumbSrc = youtubeId ? `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg` : null;
+
+                return (
+                  <a
+                    key={c.id}
+                    href={`/${c.slug}`}
+                    style={{ animationDelay: `${i * 100}ms` }}
+                    className="group relative bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1.5 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4"
+                  >
+                    {/* Thumbnail area */}
+                    <div className="relative h-44 overflow-hidden bg-slate-100">
+                      {thumbSrc ? (
+                        <>
+                          <img
+                            src={thumbSrc}
+                            alt=""
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="size-12 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                              <span className="material-symbols-outlined text-white text-2xl">play_arrow</span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center"
+                          style={{ background: `linear-gradient(135deg, ${color}22, ${color}44)` }}
+                        >
+                          <span className="material-symbols-outlined text-5xl" style={{ color: `${color}66` }}>business</span>
+                        </div>
+                      )}
+                      {/* Gradient bar */}
+                      <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: `linear-gradient(90deg, ${color}, ${color}88, transparent)` }}></div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-5">
+                      <div className="flex items-center gap-3 mb-3">
+                        {c.logo_url ? (
+                          <img src={c.logo_url} alt={c.name} className="size-11 rounded-xl object-contain bg-white border border-slate-100 p-1 shadow-sm" />
+                        ) : (
+                          <div
+                            className="size-11 rounded-xl flex items-center justify-center text-white font-black text-base shadow-sm"
+                            style={{ background: `linear-gradient(135deg, ${color}, ${color}88)` }}
+                          >
+                            {initial}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-slate-900 text-base truncate">{c.name}</h3>
+                          <p className="text-xs text-slate-400 truncate">/{c.slug}</p>
+                        </div>
+                      </div>
+
+                      {/* CTA */}
+                      <div
+                        className="flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all group-hover:shadow-md duration-300"
+                        style={{
+                          background: `${color}0c`,
+                          color: color,
+                        }}
+                      >
+                        <span>Ver Imóveis</span>
+                        <span className="flex items-center gap-1 group-hover:gap-2 transition-all">
+                          <span>Acessar</span>
+                          <span className="material-symbols-outlined text-base group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Como Funciona */}
       <section className="bg-slate-50 py-20 md:py-28 px-6">
         <div className="max-w-5xl mx-auto text-center">
@@ -346,7 +503,7 @@ const SaasHome: React.FC = () => {
               { num: '04', title: 'Comece a vender mais', desc: 'Publique imóveis e acompanhe resultados', icon: 'trending_up' },
             ].map((step, i) => (
               <div key={i} className="relative flex flex-col items-center md:px-6">
-                <div className="size-14 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-5 relative z-10">
+                <div className="size-14 bg-gradient-to-br from-primary to-blue-700 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 mb-5 relative z-10">
                   <span className="text-white font-black text-lg">{step.num}</span>
                 </div>
                 <h3 className="font-extrabold text-slate-800 text-base mb-2">{step.title}</h3>
@@ -358,18 +515,19 @@ const SaasHome: React.FC = () => {
       </section>
 
       {/* Premium Dark Bar */}
-      <section className="bar-gradient py-14 md:py-16 px-6">
-        <div className="max-w-6xl mx-auto">
+      <section className="bar-gradient py-14 md:py-16 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5"></div>
+        <div className="max-w-6xl mx-auto relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 md:gap-0">
             {[
               { icon: 'timer', title: 'Economize tempo', desc: 'Automatize tarefas repetitivas' },
               { icon: 'trending_down', title: 'Reduza custos', desc: 'Menos papel, mais eficiência' },
               { icon: 'trending_up', title: 'Aumente vendas', desc: 'Feche negócios mais rápido' },
               { icon: 'lock', title: 'Dados seguros', desc: 'Criptografia e backup diário' },
-              { icon: 'face', title: 'Suporte humanizado', desc: 'Equipe pronta para ajudar' },
+              { icon: 'support_agent', title: 'Suporte humanizado', desc: 'Equipe pronta para ajudar' },
             ].map((item, i) => (
               <div key={i} className={`flex flex-col items-center text-center md:px-6 ${i < 4 ? 'md:border-r border-slate-700/50' : ''}`}>
-                <div className="size-12 bg-white/10 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm">
+                <div className="size-12 bg-white/10 rounded-2xl flex items-center justify-center mb-4 backdrop-blur-sm group-hover:scale-110 transition-transform">
                   <span className="material-symbols-outlined text-primary text-2xl">{item.icon}</span>
                 </div>
                 <h3 className="text-white font-extrabold text-base mb-1">{item.title}</h3>
@@ -383,7 +541,7 @@ const SaasHome: React.FC = () => {
       {/* Footer */}
       <footer className="py-12 md:py-16 px-6 bg-white">
         <div className="max-w-2xl mx-auto text-center">
-          <div className="size-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+          <div className="size-14 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
             <span className="material-symbols-outlined text-emerald-500 text-3xl">verified</span>
           </div>
           <p className="text-slate-700 text-lg md:text-xl font-bold leading-relaxed">
@@ -401,8 +559,8 @@ const SaasHome: React.FC = () => {
 
       {/* Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { if (!submitting) setShowForm(false); }}>
-          <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/10" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => { if (!submitting) setShowForm(false); }}>
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/10 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100">
               <div>
                 <h2 className="font-extrabold text-lg text-slate-800">Solicitar Imobiliária</h2>
@@ -415,7 +573,7 @@ const SaasHome: React.FC = () => {
 
             <form onSubmit={handleFormSubmit} className="p-6 pt-4 space-y-4">
               {formMsg && (
-                <div className={`px-4 py-3.5 rounded-xl text-sm font-medium ${
+                <div className={`px-4 py-3.5 rounded-xl text-sm font-medium animate-in fade-in slide-in-from-top-2 duration-200 ${
                   formMsg.type === 'success'
                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     : 'bg-rose-50 text-rose-700 border border-rose-200'
@@ -453,7 +611,7 @@ const SaasHome: React.FC = () => {
               </div>
 
               <button type="submit" disabled={submitting}
-                className="w-full py-4 bg-primary hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2 active:scale-[0.98]">
+                className="w-full py-4 bg-gradient-to-r from-primary to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-primary/25 flex items-center justify-center gap-2 active:scale-[0.98]">
                 {submitting ? (
                   <span className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (

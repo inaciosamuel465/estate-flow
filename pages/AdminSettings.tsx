@@ -67,7 +67,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             ];
         })(),
         appUrl: settings.appUrl || '',
-        heroVideoUrl: settings.heroVideoUrl || '',
+        heroVideoUrl: companySettings?.hero_video_url || settings.heroVideoUrl || '',
         socialInstagram: settings.socialInstagram || '',
         socialFacebook: settings.socialFacebook || '',
         socialWhatsapp: settings.socialWhatsapp || '',
@@ -234,8 +234,11 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 const { neon } = await import('@neondatabase/serverless');
                 const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
                 await sql`
-                    INSERT INTO company_settings (company_id, company_name, smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure, email_sender_name, email_sender_address, logo_url, primary_color, secondary_color, whatsapp, instagram, facebook, website, updated_at)
-                    VALUES (${companyId}, ${localSettings.companyName}, ${localSettings.smtp_host || null}, ${localSettings.smtp_port ? Number(localSettings.smtp_port) : null}, ${localSettings.smtp_user || null}, ${localSettings.smtp_password || null}, ${!!localSettings.smtp_secure}, ${localSettings.email_sender_name || null}, ${localSettings.email_sender_address || null}, ${localSettings.logoUrl || null}, ${localSettings.primaryColor || null}, ${null}, ${localSettings.socialWhatsapp || null}, ${localSettings.socialInstagram || null}, ${localSettings.socialFacebook || null}, ${null}, NOW())
+                    ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS hero_video_url TEXT
+                `;
+                await sql`
+                    INSERT INTO company_settings (company_id, company_name, smtp_host, smtp_port, smtp_user, smtp_password, smtp_secure, email_sender_name, email_sender_address, logo_url, primary_color, secondary_color, whatsapp, instagram, facebook, website, hero_video_url, updated_at)
+                    VALUES (${companyId}, ${localSettings.companyName}, ${localSettings.smtp_host || null}, ${localSettings.smtp_port ? Number(localSettings.smtp_port) : null}, ${localSettings.smtp_user || null}, ${localSettings.smtp_password || null}, ${!!localSettings.smtp_secure}, ${localSettings.email_sender_name || null}, ${localSettings.email_sender_address || null}, ${localSettings.logoUrl || null}, ${localSettings.primaryColor || null}, ${null}, ${localSettings.socialWhatsapp || null}, ${localSettings.socialInstagram || null}, ${localSettings.socialFacebook || null}, ${null}, ${localSettings.heroVideoUrl || null}, NOW())
                     ON CONFLICT (company_id) DO UPDATE SET
                         company_name = EXCLUDED.company_name,
                         smtp_host = EXCLUDED.smtp_host,
@@ -250,6 +253,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                         whatsapp = EXCLUDED.whatsapp,
                         instagram = EXCLUDED.instagram,
                         facebook = EXCLUDED.facebook,
+                        hero_video_url = EXCLUDED.hero_video_url,
                         updated_at = NOW()
                 `;
                 // Refresh company context to reflect changes immediately

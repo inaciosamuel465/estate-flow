@@ -13,6 +13,7 @@ interface ClientHomeProps {
     onLogoutClick?: () => void;
     onFavoriteClick: (id: number | string) => void;
     settings?: Record<string, string>;
+    onBackToSaaS?: () => void;
 }
 
 const CATEGORIES = [
@@ -33,7 +34,8 @@ const ClientHome: React.FC<ClientHomeProps> = ({
     onAdminClick,
     onLogoutClick,
     onFavoriteClick,
-    settings = {}
+    settings = {},
+    onBackToSaaS
 }) => {
     // --- Estados de Filtro ---
     const [selectedCategory, setSelectedCategory] = useState('Todos');
@@ -134,6 +136,26 @@ const ClientHome: React.FC<ClientHomeProps> = ({
         });
     }, [searchText, selectedCategory, properties, filters]);
 
+    // --- Mobile Carousel State ---
+    const [carouselIndexes, setCarouselIndexes] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCarouselIndexes(prev => {
+                const next = { ...prev };
+                filteredProperties.forEach(p => {
+                    const imgs = (p as any).images;
+                    if (imgs?.length > 1) {
+                        const key = String(p.id);
+                        next[key] = ((prev[key] || 0) + 1) % imgs.length;
+                    }
+                });
+                return next;
+            });
+        }, 6000);
+        return () => clearInterval(interval);
+    }, [filteredProperties]);
+
     return (
         <>
         <div className="min-h-screen bg-[#F8F9FC] flex flex-col font-display selection:bg-primary/20 selection:text-primary pb-20 md:pb-0">
@@ -163,15 +185,25 @@ const ClientHome: React.FC<ClientHomeProps> = ({
             {/* --- NAVBAR --- */}
             <header className="fixed top-0 left-0 right-0 z-50 bg-white/5 backdrop-blur-lg border-b border-white/10 transition-all duration-300">
                 <div className="max-w-[1600px] mx-auto px-6 md:px-12 h-20 flex items-center justify-between">
-                    <div
-                        className="flex items-center gap-3 cursor-pointer group"
-                        onClick={() => {
-                            const hero = document.getElementById('hero-section');
-                            if (hero) hero.scrollIntoView({ behavior: 'smooth' });
-                            setSelectedCategory('Todos');
-                            setSearchText('');
-                        }}
-                    >
+                    <div className="flex items-center gap-1.5">
+                        {onBackToSaaS && (
+                            <button
+                                onClick={onBackToSaaS}
+                                className="size-9 flex items-center justify-center rounded-xl text-white/70 hover:text-white hover:bg-white/10 transition-all mr-1"
+                                title="Voltar ao EstateFlow"
+                            >
+                                <span className="material-symbols-outlined notranslate text-xl">apps</span>
+                            </button>
+                        )}
+                        <div
+                            className="flex items-center gap-3 cursor-pointer group"
+                            onClick={() => {
+                                const hero = document.getElementById('hero-section');
+                                if (hero) hero.scrollIntoView({ behavior: 'smooth' });
+                                setSelectedCategory('Todos');
+                                setSearchText('');
+                            }}
+                        >
                         <div className="size-9 bg-white/90 text-slate-900 rounded-lg flex items-center justify-center shadow-lg shadow-black/5 group-hover:scale-105 transition-transform overflow-hidden">
                             {settings.logoUrl ? (
                                 <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain" />
@@ -182,6 +214,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                         <span className="text-lg font-bold text-white tracking-wide drop-shadow-md">
                             {settings.companyName || 'EstateFlow'}
                         </span>
+                    </div>
                     </div>
 
                     <div className="hidden md:flex items-center gap-4">
@@ -433,7 +466,35 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                                 >
                                     {/* Imagem */}
                                     <div className="relative aspect-[4/3] overflow-hidden">
-                                        <img src={property.image} alt={property.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                        {(() => {
+                                            const imgs = (property as any).images;
+                                            const hasMultiple = imgs?.length > 1;
+                                            const imgIdx = hasMultiple ? (carouselIndexes[String(property.id)] || 0) : 0;
+                                            const src = hasMultiple ? imgs[imgIdx] : property.image;
+                                            return (
+                                                <img
+                                                    key={hasMultiple ? `${property.id}-${imgIdx}` : property.id}
+                                                    src={src}
+                                                    alt={property.title}
+                                                    className="w-full h-full object-cover transition-all duration-700 md:group-hover:scale-110"
+                                                    style={{ animation: hasMultiple ? 'none' : undefined }}
+                                                />
+                                            );
+                                        })()}
+                                        {(() => {
+                                            const imgs = (property as any).images;
+                                            if (imgs?.length > 1) {
+                                                const imgIdx = carouselIndexes[String(property.id)] || 0;
+                                                return (
+                                                    <div className="absolute bottom-4 right-4 flex gap-1.5 z-10">
+                                                        {imgs.map((_: any, i: number) => (
+                                                            <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${i === imgIdx ? 'bg-white scale-125' : 'bg-white/50'}`} />
+                                                        ))}
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80"></div>
 
                                         {/* Tags Flutuantes */}

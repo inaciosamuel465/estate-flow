@@ -278,6 +278,12 @@ const App: React.FC = () => {
     const lastSlug = getStoredTenantSlug() || company?.slug || null;
 
     if (!first) {
+      const storedSlug = getStoredTenantSlug();
+      const pwaRedirect = localStorage.getItem('estateflow_pwa_redirect') === 'true';
+      if (storedSlug && pwaRedirect) {
+        navigate(`/${storedSlug}`, { replace: true });
+        return;
+      }
       return;
     }
 
@@ -1202,6 +1208,7 @@ const App: React.FC = () => {
           onLogoutClick={handleLogout}
           onFavoriteClick={handleFavoriteAction}
           settings={settings}
+          onBackToSaaS={() => navigate('/')}
         />
         <WhatsAppButton phoneNumber="5515997241175" />
         {/* Teste de Sincronização */}

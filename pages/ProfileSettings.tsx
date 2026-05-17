@@ -18,7 +18,14 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
     });
     const [isSaving, setIsSaving] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [pwaRedirect, setPwaRedirect] = useState(() => localStorage.getItem('estateflow_pwa_redirect') === 'true');
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handlePwaToggle = () => {
+        const next = !pwaRedirect;
+        setPwaRedirect(next);
+        localStorage.setItem('estateflow_pwa_redirect', String(next));
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -231,6 +238,31 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
                     <button className="px-6 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-bold text-sm hover:bg-rose-600 hover:text-white transition-all active:scale-95 relative z-10">
                         Alterar Senha
                     </button>
+                </div>
+
+                {/* PWA Redirect Preference */}
+                <div className="mt-8 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
+                    <div className="absolute top-0 right-0 size-32 bg-sky-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
+                    <div className="flex items-center gap-4 relative z-10">
+                        <div className="size-12 bg-sky-100 text-sky-600 rounded-2xl flex items-center justify-center">
+                            <span className="material-symbols-outlined">install_mobile</span>
+                        </div>
+                        <div>
+                            <h3 className="text-slate-900 font-bold">Início Rápido no App (PWA)</h3>
+                            <p className="text-slate-500 text-sm max-w-md">
+                                Ao abrir o app instalado, ir direto para a página da imobiliária ao invés da página inicial do EstateFlow.
+                            </p>
+                        </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={pwaRedirect}
+                            onChange={handlePwaToggle}
+                        />
+                        <div className="w-14 h-7 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary shadow-inner"></div>
+                    </label>
                 </div>
             </main>
         </div>

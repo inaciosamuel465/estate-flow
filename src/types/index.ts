@@ -63,6 +63,7 @@ export interface CompanySettings {
     facebook?: string;
     website?: string;
     custom_css?: string;
+    hero_video_url?: string;
 }
 
 export interface MasterUser {

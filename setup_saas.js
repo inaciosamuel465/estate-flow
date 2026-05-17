@@ -145,6 +145,11 @@ async function migrate() {
     `;
     console.log('   Coluna visible adicionada a companies.');
 
+    await sql`
+      ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS hero_video_url TEXT
+    `;
+    console.log('   Coluna hero_video_url adicionada a company_settings.');
+
     // 5b. Criar tabela saas_settings (configuracoes globais do SaaS, apenas o master admin gerencia)
     console.log('5b. Criando tabela saas_settings...');
     await sql`

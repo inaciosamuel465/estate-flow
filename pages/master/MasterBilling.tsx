@@ -53,9 +53,11 @@ const MasterBilling: React.FC = () => {
         if (userRes.length > 0) {
           const companiesData = await sql`
             SELECT c.id, c.name, c.email, c.subscription_status, c.plan, c.created_at,
-              (SELECT u.name FROM users u WHERE u.company_id = c.id AND u.role = 'admin' LIMIT 1) as admin_name,
-              (SELECT u.email FROM users u WHERE u.company_id = c.id AND u.role = 'admin' LIMIT 1) as admin_email
-            FROM companies c ORDER BY c.created_at DESC
+              (SELECT u.name FROM users u WHERE u.company_id = c.id AND u.id = cs.billing_admin_id LIMIT 1) as admin_name,
+              (SELECT u.email FROM users u WHERE u.company_id = c.id AND u.id = cs.billing_admin_id LIMIT 1) as admin_email
+            FROM companies c
+            LEFT JOIN company_settings cs ON cs.company_id = c.id
+            ORDER BY c.created_at DESC
           `;
           setCompanies(companiesData.map((c: any) => ({
             id: c.id, name: c.name, email: c.email || '',
