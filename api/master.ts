@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
-import { signToken, verifyRequest } from './_lib/auth';
+import { signToken, verifyRequest } from './_lib/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
