@@ -5,7 +5,14 @@ import type { RegisterData } from "../../pages/LoginPage";
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS (moved inline from companyFilter.ts)
 // ─────────────────────────────────────────────────────────────────────────────
-function setStoredCompanyId(id: string) { localStorage.setItem('companyId', id); }
+function getCurrentCompanyId() {
+    return localStorage.getItem('estateflow_company_id') || localStorage.getItem('companyId') || null;
+}
+
+function setStoredCompanyId(id: string) {
+    localStorage.setItem('companyId', id);
+    localStorage.setItem('estateflow_company_id', id);
+}
 function clearStoredCompanyId() { localStorage.removeItem('companyId'); }
 
 // Tipos de resposta para facilitar o uso no Front
@@ -16,25 +23,32 @@ export interface AuthResponse {
 
 // Funções auxiliares para Session Management
 const SESSION_KEY = "estateflow_user_session";
+const getSessionKey = (companyId = getCurrentCompanyId()) => (
+    companyId ? `${SESSION_KEY}_${companyId}` : SESSION_KEY
+);
 
 const saveSession = (user: User) => {
+    const companyId = user.company_id || getCurrentCompanyId();
+    localStorage.setItem(getSessionKey(companyId), JSON.stringify(user));
     localStorage.setItem(SESSION_KEY, JSON.stringify(user));
     window.dispatchEvent(new Event("auth-change"));
 };
 
 const clearSession = () => {
+    localStorage.removeItem(getSessionKey());
     localStorage.removeItem(SESSION_KEY);
     clearStoredCompanyId();
-    localStorage.removeItem('estateflow_company_id');
-    localStorage.removeItem('estateflow_company_data');
-    localStorage.removeItem('estateflow_company_settings');
     window.dispatchEvent(new Event("auth-change"));
 };
 
 const getSession = (): User | null => {
-    const session = localStorage.getItem(SESSION_KEY);
+    const session = localStorage.getItem(getSessionKey()) || localStorage.getItem(SESSION_KEY);
     if (!session) return null;
     const user = JSON.parse(session) as User;
+    const currentCompanyId = getCurrentCompanyId();
+    if (currentCompanyId && user.company_id && user.company_id !== currentCompanyId) {
+        return null;
+    }
     if (user && !Array.isArray(user.favorites)) {
         user.favorites = [];
     }
@@ -51,19 +65,20 @@ async function hashPassword(password: string): Promise<string> {
 
 // --- Funções de Autenticação ---
 
-export const registerUser = async (data: RegisterData): Promise<AuthResponse> => {
+export const registerUser = async (data: RegisterData, companyId = getCurrentCompanyId() || 'default'): Promise<AuthResponse> => {
     try {
+        const effectiveCompanyId = companyId || getCurrentCompanyId() || 'default';
         // Verificar se usuário já existe pelo email
+        setStoredCompanyId(effectiveCompanyId);
         const existingByEmail = await neon.getUserByEmail(data.email);
         if (existingByEmail) {
             return { user: null, error: "Este email já está cadastrado." };
         }
         
-        const userId = data.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const emailKey = data.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const companyKey = effectiveCompanyId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const userId = `${companyKey}_${emailKey}`;
         const hashedPassword = await hashPassword(data.password);
-
-        const companyId = 'default';
-        setStoredCompanyId(companyId);
 
         const userData: User = {
             id: userId,
@@ -73,7 +88,7 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
             role: (data.email === 'admin@estateflow.com' ? 'admin' : data.role) as any,
             favorites: [],
             password: hashedPassword,
-            company_id: companyId,
+            company_id: effectiveCompanyId,
         } as any;
 
         await neon.upsertUser(userData);
@@ -87,10 +102,11 @@ export const registerUser = async (data: RegisterData): Promise<AuthResponse> =>
     }
 };
 
-export const loginUser = async (email: string, pass: string): Promise<AuthResponse> => {
+export const loginUser = async (email: string, pass: string, companyId = getCurrentCompanyId() || 'default'): Promise<AuthResponse> => {
     try {
-        const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const user = await neon.getUserById(userId) as any;
+        const effectiveCompanyId = companyId || getCurrentCompanyId() || 'default';
+        setStoredCompanyId(effectiveCompanyId);
+        const user = await neon.getUserByEmail(email) as any;
 
         if (!user) {
             return { user: null, error: "Usuário não encontrado." };
@@ -106,8 +122,8 @@ export const loginUser = async (email: string, pass: string): Promise<AuthRespon
             safeUser.favorites = [];
         }
         
-        const companyId = (safeUser as any).company_id || 'default';
-        setStoredCompanyId(companyId);
+        const userCompanyId = (safeUser as any).company_id || effectiveCompanyId;
+        setStoredCompanyId(userCompanyId);
         
         saveSession(safeUser);
         
@@ -122,18 +138,22 @@ export const logoutUser = async () => {
     clearSession();
 };
 
-export const loginWithGoogle = async (email: string, name: string, avatar: string, company_id = 'default'): Promise<AuthResponse> => {
+export const loginWithGoogle = async (email: string, name: string, avatar: string, company_id = getCurrentCompanyId() || 'default'): Promise<AuthResponse> => {
     try {
+        const effectiveCompanyId = company_id || getCurrentCompanyId() || 'default';
+        setStoredCompanyId(effectiveCompanyId);
         const existingUser = await neon.getUserByEmail(email);
         if (existingUser) {
             const { password: _, ...safeUser } = existingUser as any;
             if (!Array.isArray(safeUser.favorites)) safeUser.favorites = [];
-            setStoredCompanyId(safeUser.company_id || company_id);
+            setStoredCompanyId(safeUser.company_id || effectiveCompanyId);
             saveSession(safeUser);
             return { user: safeUser as User };
         }
 
-        const userId = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const emailKey = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const companyKey = effectiveCompanyId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const userId = `${companyKey}_${emailKey}`;
         const newUser: User = {
             id: userId,
             name,
@@ -141,11 +161,11 @@ export const loginWithGoogle = async (email: string, name: string, avatar: strin
             avatar,
             role: 'client',
             favorites: [],
-            company_id,
+            company_id: effectiveCompanyId,
         } as any;
 
         await neon.upsertUser(newUser);
-        setStoredCompanyId(company_id);
+        setStoredCompanyId(effectiveCompanyId);
         saveSession(newUser);
         return { user: newUser };
     } catch (error: any) {
@@ -161,10 +181,13 @@ export const subscribeToAuthChanges = (callback: (user: User | null) => void) =>
     };
 
     window.addEventListener("auth-change", handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
     
     // Check inicial
     callback(getSession());
 
-    return () => window.removeEventListener("auth-change", handleAuthChange);
+    return () => {
+        window.removeEventListener("auth-change", handleAuthChange);
+        window.removeEventListener("storage", handleAuthChange);
+    };
 };
-

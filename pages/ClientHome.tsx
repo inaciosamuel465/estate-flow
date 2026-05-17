@@ -9,6 +9,7 @@ interface ClientHomeProps {
     onAdvertiseClick: () => void;
     currentUser: User | null;
     onUserDashboardClick: () => void;
+    onAdminClick?: () => void;
     onLogoutClick?: () => void;
     onFavoriteClick: (id: number | string) => void;
     settings?: Record<string, string>;
@@ -29,6 +30,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
     onAdvertiseClick,
     currentUser,
     onUserDashboardClick,
+    onAdminClick,
     onLogoutClick,
     onFavoriteClick,
     settings = {}
@@ -192,6 +194,15 @@ const ClientHome: React.FC<ClientHomeProps> = ({
 
                         {currentUser ? (
                             <div className="flex items-center gap-2">
+                                {currentUser.role === 'admin' && onAdminClick && (
+                                    <button
+                                        onClick={onAdminClick}
+                                        className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500 text-white hover:bg-indigo-400 text-sm font-bold shadow-lg shadow-indigo-900/20 transition-all"
+                                    >
+                                        <span className="material-symbols-outlined notranslate text-[18px]">admin_panel_settings</span>
+                                        <span>Área Admin</span>
+                                    </button>
+                                )}
                                 <button
                                     onClick={onUserDashboardClick}
                                     className="flex items-center gap-3 pl-2 pr-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all border border-white/20 text-white group"
@@ -597,15 +608,17 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                 </button>
 
                 <button
-                    onClick={currentUser ? onUserDashboardClick : onLoginClick}
+                    onClick={currentUser?.role === 'admin' && onAdminClick ? onAdminClick : currentUser ? onUserDashboardClick : onLoginClick}
                     className={`flex flex-col items-center gap-1 transition-colors ${currentUser ? 'text-primary' : 'text-slate-400'}`}
                 >
-                    {currentUser ? (
+                    {currentUser?.role === 'admin' ? (
+                        <span className="material-symbols-outlined">admin_panel_settings</span>
+                    ) : currentUser ? (
                         <div className="size-6 rounded-full bg-slate-200 bg-cover bg-center border border-current" style={{ backgroundImage: currentUser.avatar ? `url("${currentUser.avatar}")` : 'none' }}></div>
                     ) : (
                         <span className="material-symbols-outlined">person</span>
                     )}
-                    <span className="text-[10px] font-bold">{currentUser ? 'Perfil' : 'Entrar'}</span>
+                    <span className="text-[10px] font-bold">{currentUser?.role === 'admin' ? 'Admin' : currentUser ? 'Perfil' : 'Entrar'}</span>
                 </button>
             </nav>
         </div >

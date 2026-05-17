@@ -24,7 +24,7 @@ import PublicContractSign from './pages/PublicContractSign';
 import SubscriptionPlans from './pages/SubscriptionPlans';
 import PaymentResult from './pages/PaymentResult';
 import SaasHome from './pages/SaasHome';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { NotificationProvider } from './src/contexts/NotificationContext';
 
 import {
@@ -77,8 +77,26 @@ const PublicLayout = ({ children }: { children?: React.ReactNode }) => (
   </div>
 );
 
+const ROOT_ONLY_PATHS = ['master', 'payment'];
+const LEGACY_TENANT_PATHS = ['login', 'admin', 'dashboard', 'advertise', 'property', 'Estate', 'contrato', 'properties'];
+
+const getStoredTenantSlug = () => {
+  try {
+    return localStorage.getItem('estateflow_last_slug');
+  } catch {
+    return null;
+  }
+};
+
+const isSafeTenantReturnPath = (path: string | null) => {
+  if (!path || !path.startsWith('/')) return false;
+  if (path.startsWith('//')) return false;
+  if (path === '/login' || path.startsWith('/login?')) return false;
+  return true;
+};
+
 const App: React.FC = () => {
-  const { company, companySettings, refreshCompany } = useCompany();
+  const { company, companySettings, refreshCompany, isLoading: isCompanyLoading } = useCompany();
 
   // --- AI States ---
   const [isAIThinking, setIsAIThinking] = useState(false);
@@ -119,9 +137,43 @@ const App: React.FC = () => {
       setNotifications(notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     });
 
-    // Carregar dados reais
+    if (isCompanyLoading) {
+      return () => {
+        unsubscribeAuth();
+        unsubscribeNotifications();
+      };
+    }
+
+    const first = window.location.pathname.split('/').filter(Boolean)[0] || null;
+    const isRootOnlyRoute = !first || ROOT_ONLY_PATHS.includes(first);
+    if (!company?.id && isRootOnlyRoute) {
+      setProperties([]);
+      setContracts([]);
+      setUsers([]);
+      setIsInitialLoading(false);
+      return () => {
+        unsubscribeAuth();
+        unsubscribeNotifications();
+      };
+    }
+
+    if (!company?.id) {
+      setProperties([]);
+      setContracts([]);
+      setUsers([]);
+      setIsInitialLoading(false);
+      return () => {
+        unsubscribeAuth();
+        unsubscribeNotifications();
+      };
+    }
+
+    setIsInitialLoading(true);
+
+    // Carregar dados reais somente depois que o tenant foi resolvido.
     const loadData = async () => {
       try {
+        setDataLoadError(null);
         const [props, conts, userList, globalSettings] = await Promise.all([
           getProperties(),
           getContracts(),
@@ -145,7 +197,7 @@ const App: React.FC = () => {
       unsubscribeAuth();
       unsubscribeNotifications();
     };
-  }, []);
+  }, [company?.id, isCompanyLoading]);
 
   // --- Dynamic Branding Injection (Company-aware) ---
   useEffect(() => {
@@ -175,27 +227,115 @@ const App: React.FC = () => {
   // Extract slug from URL path (e.g., /estate1/admin/dashboard -> slug=estate1)
   const pathParts = location.pathname.split('/').filter(Boolean);
   const firstSegment = pathParts[0] || null;
-  const SYSTEM_PATHS = ['master', 'plans', 'login', 'advertise', 'contrato', 'payment'];
+  const SYSTEM_PATHS = [...ROOT_ONLY_PATHS, 'plans', ...LEGACY_TENANT_PATHS];
 
   const isSystemRoute = !firstSegment || firstSegment === '' || SYSTEM_PATHS.includes(firstSegment) || firstSegment.startsWith('Estate');
   const routeSlug = isSystemRoute ? null : firstSegment;
   const subpath = routeSlug ? '/' + pathParts.slice(1).join('/') : location.pathname;
+  const tenantSlug = routeSlug || company?.slug || getStoredTenantSlug();
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : '';
+  const isAdminRoute = !!routeSlug && subpath.startsWith('/admin');
+  const isUserProtectedRoute = !!routeSlug && (subpath === '/dashboard' || subpath === '/profile');
+  const tenantReturnKey = tenantSlug ? `estateflow_return_to_${tenantSlug}` : null;
+
+  const getTenantPath = (path = subpath) => `${tenantPrefix}${path === '/' ? '' : path}`;
+
+  const rememberReturnTo = (path = subpath) => {
+    if (!tenantReturnKey || !isSafeTenantReturnPath(path)) return;
+    localStorage.setItem(tenantReturnKey, path);
+  };
+
+  const getLoginPath = (returnPath?: string) => {
+    const safeReturnPath = isSafeTenantReturnPath(returnPath || null) ? returnPath : null;
+    const query = safeReturnPath ? `?next=${encodeURIComponent(safeReturnPath)}` : '';
+    return tenantPrefix ? `${tenantPrefix}/login${query}` : '/';
+  };
+
+  const goToLogin = (returnPath = subpath) => {
+    rememberReturnTo(returnPath);
+    navigate(getLoginPath(returnPath));
+  };
+
+  const leaveLogin = () => {
+    const params = new URLSearchParams(location.search);
+    const nextFromQuery = params.get('next');
+    const nextFromStorage = tenantReturnKey ? localStorage.getItem(tenantReturnKey) : null;
+    const nextPath = isSafeTenantReturnPath(nextFromQuery) ? nextFromQuery : nextFromStorage;
+    if (tenantReturnKey) localStorage.removeItem(tenantReturnKey);
+
+    if (nextPath && !nextPath.startsWith('/admin')) {
+      navigate(getTenantPath(nextPath), { replace: true });
+      return;
+    }
+
+    setCurrentView('home');
+  };
+
+  // --- Redirect Guard: all company URLs must have slug ---
+  useEffect(() => {
+    if (isCompanyLoading) return;
+    const first = location.pathname.split('/').filter(Boolean)[0];
+    const lastSlug = getStoredTenantSlug() || company?.slug || null;
+
+    if (!first) {
+      return;
+    }
+
+    if (!routeSlug && LEGACY_TENANT_PATHS.includes(first)) {
+      if (lastSlug) {
+        const rest = location.pathname.split('/').filter(Boolean).slice(1).join('/');
+        const normalizedFirst = first === 'Estate' ? 'property' : first;
+        navigate(`/${lastSlug}/${normalizedFirst}${rest ? `/${rest}` : ''}`, { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+      return;
+    }
+
+    if (routeSlug && !company) {
+      return;
+    }
+
+    if (subpath.startsWith('/Estate/')) {
+      const id = subpath.split('/')[2];
+      navigate(`${tenantPrefix}/property/${id}`, { replace: true });
+      return;
+    }
+  }, [isCompanyLoading, location.pathname, company, routeSlug, subpath, tenantPrefix, navigate]);
+
+  useEffect(() => {
+    if (isInitialLoading || isCompanyLoading || (!isAdminRoute && !isUserProtectedRoute)) return;
+
+    if ((isAdminRoute || isUserProtectedRoute) && !currentUser) {
+      rememberReturnTo(subpath);
+      navigate(getLoginPath(subpath), { replace: true });
+      return;
+    }
+
+    if (isAdminRoute && currentUser.role !== 'admin') {
+      navigate(`${tenantPrefix}/dashboard`, { replace: true });
+    }
+  }, [currentUser, isAdminRoute, isUserProtectedRoute, isCompanyLoading, isInitialLoading, subpath, tenantPrefix, navigate]);
 
   const currentView = React.useMemo(() => {
     const p = subpath;
+    if (p.startsWith('/property/')) return 'details';
     if (p.startsWith('/Estate/')) return 'details';
     if (p.startsWith('/admin/details/')) return 'admin-details';
     if (p === '/login') return 'login';
     if (p === '/advertise') return 'advertise';
     if (p === '/dashboard') return 'user-dashboard';
+    if (p === '/profile') return 'profile-settings';
     if (p === '/payment/success') return 'payment-success';
     if (p === '/payment/failure') return 'payment-failure';
     if (p === '/payment/pending') return 'payment-pending';
     if (p.startsWith('/plans')) return 'plans';
     if (p.startsWith('/contrato/')) return 'public-contract';
     if (p.startsWith('/admin')) {
+      if (p === '/admin') return 'dashboard';
       if (p === '/admin/dashboard') return 'dashboard';
       if (p === '/admin/listings') return 'all-listings';
+      if (p === '/admin/properties') return 'all-listings';
       if (p === '/admin/listing/new') return 'listing';
       if (p === '/admin/listing/edit') return 'edit-listing';
       if (p === '/admin/financial') return 'financial';
@@ -211,15 +351,17 @@ const App: React.FC = () => {
       if (p === '/admin/users') return 'users';
       return 'dashboard';
     }
-    // If at root with no slug, show SaasHome
-    if (p === '/' || p === '') return 'saas-home';
+    if (p === '/properties') return 'all-listings';
     // If at root with slug (e.g., /estate1), show agency home
     if (routeSlug && (p === '/' || p === '')) return 'home';
+    // If at root with no slug, show SaasHome
+    if (p === '/' || p === '') return 'saas-home';
     return 'home';
   }, [subpath, routeSlug]);
 
   const selectedPropertyId = React.useMemo(() => {
     const p = subpath;
+    if (p.startsWith('/property/')) return p.split('/')[2];
     if (p.startsWith('/Estate/')) return p.split('/')[2];
     if (p.startsWith('/admin/details/')) return p.split('/')[3];
     return null;
@@ -232,29 +374,30 @@ const App: React.FC = () => {
   }, [subpath]);
 
   const setCurrentView = (view: string, customSlug?: string) => {
-    const s = customSlug || routeSlug;
+    const s = customSlug || tenantSlug || null;
     const pref = s ? `/${s}` : '';
     const viewMap: Record<string, string> = {
-      'dashboard': `${pref}/admin/dashboard`,
-      'all-listings': `${pref}/admin/listings`,
-      'listing': `${pref}/admin/listing/new`,
-      'edit-listing': `${pref}/admin/listing/edit`,
-      'financial': `${pref}/admin/financial`,
-      'contracts': `${pref}/admin/contracts`,
-      'marketing': `${pref}/admin/marketing`,
-      'map': `${pref}/admin/map`,
-      'crm': `${pref}/admin/crm`,
-      'ai': `${pref}/admin/ai`,
-      'ai-analytics': `${pref}/admin/ai-analytics`,
-      'analytics': `${pref}/admin/analytics`,
-      'profile-settings': `${pref}/admin/profile-settings`,
-      'settings': `${pref}/admin/settings`,
-      'users': `${pref}/admin/users`,
+      'dashboard': s ? `${pref}/admin` : '/',
+      'all-listings': s ? `${pref}/admin/properties` : '/',
+      'listing': s ? `${pref}/admin/listing/new` : '/',
+      'edit-listing': s ? `${pref}/admin/listing/edit` : '/',
+      'financial': s ? `${pref}/admin/financial` : '/',
+      'contracts': s ? `${pref}/admin/contracts` : '/',
+      'marketing': s ? `${pref}/admin/marketing` : '/',
+      'map': s ? `${pref}/admin/map` : '/',
+      'crm': s ? `${pref}/admin/crm` : '/',
+      'ai': s ? `${pref}/admin/ai` : '/',
+      'ai-analytics': s ? `${pref}/admin/ai-analytics` : '/',
+      'analytics': s ? `${pref}/admin/analytics` : '/',
+      'profile-settings': s ? `${pref}/admin/profile-settings` : '/',
+      'client-profile-settings': s ? `${pref}/profile` : '/',
+      'settings': s ? `${pref}/admin/settings` : '/',
+      'users': s ? `${pref}/admin/users` : '/',
       'home': s ? `/${s}` : '/',
-      'login': '/login',
-      'advertise': '/advertise',
-      'user-dashboard': s ? `/${s}/dashboard` : '/dashboard',
-      'plans': '/plans',
+      'login': s ? `/${s}/login` : '/',
+      'advertise': s ? `/${s}/advertise` : '/advertise',
+      'user-dashboard': s ? `/${s}/dashboard` : '/',
+      'plans': s ? `/${s}/plans` : '/plans',
       'payment-success': '/payment/success',
       'payment-failure': '/payment/failure',
       'payment-pending': '/payment/pending',
@@ -384,40 +527,41 @@ const App: React.FC = () => {
 
   const handleLogin = async (user: User) => {
     setCurrentUser(user);
-    // Try to get slug from stored company data
-    const storedData = localStorage.getItem('estateflow_company_data');
-    if (storedData) {
-      try {
-        const c = JSON.parse(storedData);
-        if (c.slug) {
-          setCurrentView('dashboard', c.slug);
-          return;
-        }
-      } catch {}
+    const slug = tenantSlug || company?.slug || getStoredTenantSlug();
+    if (!slug) await refreshCompany();
+
+    if (slug) {
+      localStorage.setItem(`estateflow_user_tenant_${user.id}`, slug);
     }
-    // Fallback: navigate to admin dashboard (will work after company context loads)
-    await refreshCompany();
+
+    const params = new URLSearchParams(location.search);
+    const nextFromQuery = params.get('next');
+    const nextFromStorage = tenantReturnKey ? localStorage.getItem(tenantReturnKey) : null;
+    const nextPath = isSafeTenantReturnPath(nextFromQuery) ? nextFromQuery : nextFromStorage;
+
+    if (tenantReturnKey) localStorage.removeItem(tenantReturnKey);
+
+    if (nextPath && !(nextPath.startsWith('/admin') && user.role !== 'admin')) {
+      navigate(getTenantPath(nextPath), { replace: true });
+      return;
+    }
+
+    navigate(user.role === 'admin' ? `${tenantPrefix}/admin` : `${tenantPrefix}/dashboard`, { replace: true });
   };
 
   const handleRegister = async (user: User) => {
     setCurrentUser(user);
-    const storedData = localStorage.getItem('estateflow_company_data');
-    if (storedData) {
-      try {
-        const c = JSON.parse(storedData);
-        if (c.slug) {
-          setCurrentView('home', c.slug);
-          return;
-        }
-      } catch {}
+    const slug = tenantSlug || company?.slug || getStoredTenantSlug();
+    if (slug) {
+      localStorage.setItem(`estateflow_user_tenant_${user.id}`, slug);
     }
-    await refreshCompany();
+    navigate(user.role === 'admin' ? `${tenantPrefix}/admin` : `${tenantPrefix}/dashboard`, { replace: true });
   };
 
   const handleLogout = async () => {
     await logoutUser();
     setCurrentUser(null);
-    setCurrentView('home');
+    navigate(tenantPrefix || '/', { replace: true });
     setIsMobileMenuOpen(false);
   };
 
@@ -440,7 +584,7 @@ const App: React.FC = () => {
   const handleSendCredentials = async (user: User, password: string): Promise<boolean> => {
     try {
       const siteUrl = 'https://estate-flow-amber.vercel.app';
-      const loginUrl = `${siteUrl}/login`;
+      const loginUrl = `${siteUrl}${tenantPrefix}/login`;
       const companyId = company?.id || localStorage.getItem('estateflow_company_id');
       const res = await fetch('/api/email/send', {
         method: 'POST',
@@ -484,17 +628,18 @@ const App: React.FC = () => {
   // --- Handlers de Navegação e Ações ---
 
   const handlePropertySelect = (id: number | string) => {
+    const prefix = tenantPrefix;
     if (currentUser?.role === 'admin') {
-      navigate(`/admin/details/${id}`);
+      navigate(`${prefix}/admin/details/${id}`);
     } else {
-      navigate(`/Estate/${id}`);
+      navigate(`${prefix}/property/${id}`);
     }
   };
 
   const handleFavoriteAction = async (id: number | string) => {
     if (!currentUser) {
       alert("Você precisa fazer login para favoritar imóveis.");
-      setCurrentView('login');
+      goToLogin(subpath);
       return;
     }
 
@@ -575,13 +720,47 @@ const App: React.FC = () => {
     );
   }
 
+  if (!isCompanyLoading && routeSlug && !company) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="size-20 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mb-6">
+          <span className="material-symbols-outlined text-4xl">domain_disabled</span>
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">Imobiliaria nao encontrada</h1>
+        <p className="text-slate-500 mb-8 max-w-md">
+          O endereco /{routeSlug} nao corresponde a uma imobiliaria ativa no EstateFlow.
+        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-8 py-3 bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+        >
+          Voltar para o SaaS
+        </button>
+      </div>
+    );
+  }
+
   // Master Admin (rota /master)
   if (location.pathname.startsWith('/master')) {
     return <MasterApp />;
   }
 
   // 1. Visão de Admin (Logado e role='admin')
-  if (currentUser?.role === 'admin') {
+  if (!isCompanyLoading && isAdminRoute && !currentUser) {
+    rememberReturnTo(subpath);
+    return <Navigate to={getLoginPath(subpath)} replace />;
+  }
+
+  if (!isCompanyLoading && isAdminRoute && currentUser && currentUser.role !== 'admin') {
+    return <Navigate to={`${tenantPrefix}/dashboard`} replace />;
+  }
+
+  if (!isCompanyLoading && isUserProtectedRoute && !currentUser) {
+    rememberReturnTo(subpath);
+    return <Navigate to={getLoginPath(subpath)} replace />;
+  }
+
+  if (currentUser?.role === 'admin' && isAdminRoute) {
     const renderAdminView = () => {
       switch (currentView) {
         case 'dashboard': return (
@@ -879,7 +1058,7 @@ const App: React.FC = () => {
           <LoginPage
             onLoginSuccess={handleLogin}
             onRegisterSuccess={handleRegister}
-            onCancel={() => setCurrentView('home')}
+            onCancel={leaveLogin}
             companyId={company?.id || ''}
           />
         </PublicLayout>
@@ -918,7 +1097,7 @@ const App: React.FC = () => {
             contracts={contracts}
             onPropertySelect={handlePropertySelect}
             onLogout={handleLogout}
-            onEditProfile={() => setCurrentView('profile-settings')}
+            onEditProfile={() => setCurrentView('client-profile-settings')}
             onUpdateContract={handleUpdateContract}
           />
         </PublicLayout>
@@ -938,7 +1117,7 @@ const App: React.FC = () => {
           <ProfileSettings
             user={currentUser}
             onSave={handleUpdateUser}
-            onBack={() => setCurrentView(currentUser.role === 'admin' ? 'dashboard' : 'user-dashboard')}
+            onBack={() => setCurrentView(currentUser.role === 'admin' && isAdminRoute ? 'dashboard' : 'user-dashboard')}
           />
         </PublicLayout>
       </NotificationProvider>
@@ -984,6 +1163,7 @@ const App: React.FC = () => {
         currentPlan={currentUser ? company?.plan : undefined}
         currentStatus={currentUser ? company?.subscription_status : undefined}
         isLoggedIn={!!currentUser}
+        loginPath={tenantPrefix ? `${tenantPrefix}/login` : '/'}
         onBack={() => setCurrentView('home')}
       />
     );
@@ -1014,10 +1194,11 @@ const App: React.FC = () => {
         <ClientHome
           properties={properties}
           onPropertySelect={handlePropertySelect}
-          onLoginClick={() => setCurrentView('login')}
+          onLoginClick={() => goToLogin(subpath)}
           onAdvertiseClick={() => setCurrentView('advertise')}
           currentUser={currentUser}
           onUserDashboardClick={() => setCurrentView('user-dashboard')}
+          onAdminClick={() => setCurrentView('dashboard')}
           onLogoutClick={handleLogout}
           onFavoriteClick={handleFavoriteAction}
           settings={settings}

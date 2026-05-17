@@ -6,9 +6,10 @@ interface SubscriptionPlansProps {
   currentStatus?: string;
   onBack?: () => void;
   isLoggedIn?: boolean;
+  loginPath?: string;
 }
 
-const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ companyId, currentPlan, currentStatus, onBack, isLoggedIn }) => {
+const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ companyId, currentPlan, currentStatus, onBack, isLoggedIn, loginPath = '/' }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [planName, setPlanName] = useState('Mensal');
@@ -62,7 +63,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ companyId, curren
           <span className="material-symbols-outlined text-6xl text-slate-300 mb-4">lock</span>
           <h2 className="text-2xl font-black text-slate-900 mb-2">Faça Login</h2>
           <p className="text-slate-500 text-sm mb-6">Você precisa estar logado para gerenciar sua assinatura.</p>
-          <a href="/login" className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-4 rounded-xl transition-all">
+          <a href={loginPath} className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-4 rounded-xl transition-all">
             Ir para Login
           </a>
         </div>

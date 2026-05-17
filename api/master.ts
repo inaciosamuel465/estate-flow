@@ -82,19 +82,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!company_id) return res.status(400).json({ error: 'company_id required' });
 
     try {
-      const [company, settings, adminRow] = await Promise.all([
-        sql`SELECT id, name, email, subscription_status, plan FROM companies WHERE id = ${company_id} LIMIT 1`,
+      await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
+
+      const [company, settings, billingAdminRow, adminRow] = await Promise.all([
+        sql`SELECT id, name, slug, email, subscription_status, plan FROM companies WHERE id = ${company_id} LIMIT 1`,
         sql`SELECT * FROM saas_settings WHERE id = 'global' LIMIT 1`,
-        sql`SELECT name, email FROM users WHERE company_id = ${company_id} AND role = 'admin' LIMIT 1`,
+        sql`
+          SELECT u.name, u.email
+          FROM company_settings cs
+          JOIN users u ON u.id = cs.billing_admin_id AND u.company_id = cs.company_id
+          WHERE cs.company_id = ${company_id}
+          LIMIT 1
+        `,
+        sql`SELECT name, email FROM users WHERE company_id = ${company_id} AND role = 'admin' ORDER BY name LIMIT 1`,
       ]);
 
       if (company.length === 0) return res.status(404).json({ error: 'Company not found' });
 
       const c = company[0];
       const s = settings[0] || { plan_name: 'Mensal', plan_price: 170, billing_email_from: '' };
-      const admin = adminRow[0] || null;
+      const admin = billingAdminRow[0] || adminRow[0] || null;
       const planPrice = Number(s.plan_price) || 170;
       const appUrl = process.env.VITE_APP_URL || 'https://estate-flow-amber.vercel.app';
+      const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
       const to = admin?.email || c.email;
       const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
       const html = `
@@ -115,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             </div>
             <p style="color:#64748b;font-size:14px;">Para gerenciar sua assinatura, acesse o sistema:</p>
             <div style="text-align:center;margin:24px 0;">
-              <a href="${appUrl}/plans" style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:12px;text-decoration:none;font-weight:bold;display:inline-block;">Gerenciar Assinatura</a>
+              <a href="${plansUrl}" style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:12px;text-decoration:none;font-weight:bold;display:inline-block;">Gerenciar Assinatura</a>
             </div>
             <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
             <p style="color:#94a3b8;font-size:12px;">EstateFlow Suite — Gestão Imobiliária</p>

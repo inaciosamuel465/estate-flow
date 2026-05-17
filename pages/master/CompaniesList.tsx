@@ -1,9 +1,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
+interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: string;
+}
+
 interface CompanyRow {
   id: string;
   name: string;
   slug: string;
+  subdomain?: string;
   email: string;
   phone: string;
   status: string;
@@ -14,6 +23,9 @@ interface CompanyRow {
   user_count?: number;
   property_count?: number;
   admin_info?: { name: string; email: string } | null;
+  billing_admin_id?: string | null;
+  billing_admin_info?: { id: string; name: string; email: string } | null;
+  admins?: AdminUser[];
 }
 
 const statusBadge = (status: string) => {
@@ -36,33 +48,64 @@ const subBadge = (status: string) => {
   return map[status] || 'bg-slate-500/20 text-slate-400';
 };
 
+const hashPassword = async (password: string) => {
+  const msgUint8 = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const ensureTenantUserSchema = async (sql: any) => {
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id TEXT`;
+  await sql`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_company_email_idx ON users (company_id, lower(email))`;
+};
+
 const CompaniesList: React.FC = () => {
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCompany, setNewCompany] = useState({ name: '', slug: '', email: '', phone: '', adminName: '', adminEmail: '' });
+  const [newCompany, setNewCompany] = useState({ name: '', slug: '', email: '', phone: '', adminName: '', adminEmail: '', adminPassword: '' });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [editCompany, setEditCompany] = useState<CompanyRow | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailMsg, setEmailMsg] = useState('');
+  const [newAdmin, setNewAdmin] = useState({ name: '', email: '', phone: '', password: '' });
 
   const loadCompanies = useCallback(async () => {
     try {
       const { neon } = await import('@neondatabase/serverless');
       const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+      await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
       const rows = await sql`
         SELECT c.*,
+          cs.billing_admin_id,
           (SELECT COUNT(*) FROM users WHERE company_id = c.id) as user_count,
           (SELECT COUNT(*) FROM properties WHERE company_id = c.id) as property_count,
           (SELECT json_build_object('name', u.name, 'email', u.email)
-             FROM users u WHERE u.company_id = c.id AND u.role = 'admin' LIMIT 1) as admin_info
+             FROM users u
+             WHERE u.company_id = c.id AND u.role = 'admin'
+             ORDER BY CASE WHEN u.id = cs.billing_admin_id THEN 0 ELSE 1 END, u.name
+             LIMIT 1) as admin_info,
+          (SELECT json_build_object('id', u.id, 'name', u.name, 'email', u.email)
+             FROM users u
+             WHERE u.company_id = c.id AND u.id = cs.billing_admin_id
+             LIMIT 1) as billing_admin_info,
+          COALESCE((
+            SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'phone', u.phone, 'role', u.role) ORDER BY u.name)
+            FROM users u
+            WHERE u.company_id = c.id AND u.role = 'admin'
+          ), '[]'::json) as admins
         FROM companies c
+        LEFT JOIN company_settings cs ON cs.company_id = c.id
         ORDER BY c.created_at DESC
       `;
       setCompanies(rows as unknown as CompanyRow[]);
+      return rows as unknown as CompanyRow[];
     } catch (err) {
       console.error('Erro ao carregar empresas:', err);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -82,6 +125,7 @@ const CompaniesList: React.FC = () => {
       const { neon } = await import('@neondatabase/serverless');
       const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
       const id = `comp_${Date.now()}`;
+      await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
 
       await sql`
         INSERT INTO companies (id, name, slug, email, phone, status, subscription_status, plan)
@@ -99,14 +143,21 @@ const CompaniesList: React.FC = () => {
       `;
 
       if (newCompany.adminName && newCompany.adminEmail) {
+        await ensureTenantUserSchema(sql);
+        const password = newCompany.adminPassword || `admin-${Date.now()}`;
+        const hashedPassword = await hashPassword(password);
+        const adminId = 'user_' + Date.now();
         await sql`
-          INSERT INTO users (id, name, email, role, company_id)
-          VALUES (${'user_' + Date.now()}, ${newCompany.adminName}, ${newCompany.adminEmail}, 'admin', ${id})
+          INSERT INTO users (id, name, email, password, role, company_id)
+          VALUES (${adminId}, ${newCompany.adminName}, ${newCompany.adminEmail}, ${hashedPassword}, 'admin', ${id})
+        `;
+        await sql`
+          UPDATE company_settings SET billing_admin_id = ${adminId}, updated_at = NOW() WHERE company_id = ${id}
         `;
       }
 
       setShowCreate(false);
-      setNewCompany({ name: '', slug: '', email: '', phone: '', adminName: '', adminEmail: '' });
+      setNewCompany({ name: '', slug: '', email: '', phone: '', adminName: '', adminEmail: '', adminPassword: '' });
       await loadCompanies();
     } catch (err: any) {
       setError(err.message || 'Erro ao criar empresa');
@@ -129,13 +180,90 @@ const CompaniesList: React.FC = () => {
       const { neon } = await import('@neondatabase/serverless');
       const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
       await sql`
-        UPDATE companies SET name = ${editCompany.name}, slug = ${editCompany.slug}, visible = ${editCompany.visible}, updated_at = NOW()
+        UPDATE companies SET
+          name = ${editCompany.name},
+          slug = ${editCompany.slug},
+          subdomain = ${editCompany.subdomain || null},
+          email = ${editCompany.email || null},
+          phone = ${editCompany.phone || null},
+          status = ${editCompany.status},
+          subscription_status = ${editCompany.subscription_status},
+          plan = ${editCompany.plan || 'free'},
+          visible = ${editCompany.visible},
+          updated_at = NOW()
         WHERE id = ${editCompany.id}
       `;
       setEditCompany(null);
       await loadCompanies();
     } catch (err) {
       console.error('Erro ao editar:', err);
+    }
+  };
+
+  const refreshSelectedCompany = async (companyId: string) => {
+    const rows = await loadCompanies();
+    const updated = rows.find(company => company.id === companyId);
+    if (updated) setEditCompany({ ...updated });
+  };
+
+  const handleSetBillingAdmin = async (companyId: string, adminId: string) => {
+    try {
+      const { neon } = await import('@neondatabase/serverless');
+      const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+      await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
+      await sql`
+        INSERT INTO company_settings (company_id, company_name, billing_admin_id, updated_at)
+        VALUES (${companyId}, ${editCompany?.name || null}, ${adminId}, NOW())
+        ON CONFLICT (company_id) DO UPDATE SET billing_admin_id = EXCLUDED.billing_admin_id, updated_at = NOW()
+      `;
+      setEditCompany(p => p ? ({ ...p, billing_admin_id: adminId, billing_admin_info: p.admins?.find(a => a.id === adminId) || null }) : p);
+      await loadCompanies();
+    } catch (err) {
+      console.error('Erro ao definir admin de cobranca:', err);
+    }
+  };
+
+  const handleUpdateAdmin = async (admin: AdminUser) => {
+    if (!editCompany) return;
+    try {
+      const { neon } = await import('@neondatabase/serverless');
+      const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+      await sql`
+        UPDATE users SET name = ${admin.name}, email = ${admin.email}, phone = ${admin.phone || null}
+        WHERE id = ${admin.id} AND company_id = ${editCompany.id}
+      `;
+      await refreshSelectedCompany(editCompany.id);
+    } catch (err) {
+      console.error('Erro ao editar admin:', err);
+    }
+  };
+
+  const handleAddAdmin = async () => {
+    if (!editCompany) return;
+    if (!newAdmin.name || !newAdmin.email || !newAdmin.password) {
+      setEmailMsg('Preencha nome, email e senha do novo admin.');
+      setTimeout(() => setEmailMsg(''), 4000);
+      return;
+    }
+
+    try {
+      const { neon } = await import('@neondatabase/serverless');
+      const sql = neon(import.meta.env.VITE_DATABASE_URL || '');
+      await ensureTenantUserSchema(sql);
+      const adminId = `user_${Date.now()}`;
+      const hashedPassword = await hashPassword(newAdmin.password);
+      await sql`
+        INSERT INTO users (id, name, email, phone, password, role, company_id)
+        VALUES (${adminId}, ${newAdmin.name}, ${newAdmin.email}, ${newAdmin.phone || null}, ${hashedPassword}, 'admin', ${editCompany.id})
+      `;
+      if (!editCompany.billing_admin_id && (editCompany.admins?.length || 0) === 0) {
+        await handleSetBillingAdmin(editCompany.id, adminId);
+      }
+      setNewAdmin({ name: '', email: '', phone: '', password: '' });
+      await refreshSelectedCompany(editCompany.id);
+    } catch (err: any) {
+      setEmailMsg('Erro ao criar admin: ' + (err.message || 'verifique os dados'));
+      setTimeout(() => setEmailMsg(''), 4000);
     }
   };
 
@@ -276,6 +404,12 @@ const CompaniesList: React.FC = () => {
                 className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 placeholder="joao@imobiliaria.com" />
             </div>
+            <div>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Senha do admin</label>
+              <input type="password" value={newCompany.adminPassword} onChange={e => setNewCompany(p => ({ ...p, adminPassword: e.target.value }))}
+                className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                placeholder="Senha inicial" />
+            </div>
           </div>
           <div className="flex gap-3">
             <button onClick={handleCreate} disabled={creating}
@@ -310,11 +444,12 @@ const CompaniesList: React.FC = () => {
                 <tr key={c.id} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors">
                   <td className="px-6 py-4">
                     <p className="text-white font-bold">{c.name}</p>
-                    <p className="text-xs text-slate-500">{c.email || c.slug}</p>
+                    <p className="text-xs text-slate-500">/{c.slug}{c.subdomain ? ` - ${c.subdomain}` : ''}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-white text-sm">{c.admin_info?.name || '-'}</p>
-                    <p className="text-xs text-slate-500">{c.admin_info?.email || '-'}</p>
+                    <p className="text-white text-sm">{c.billing_admin_info?.name || c.admin_info?.name || '-'}</p>
+                    <p className="text-xs text-slate-500">{c.billing_admin_info?.email || c.admin_info?.email || '-'}</p>
+                    {c.billing_admin_info && <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider mt-1">Recebe cobranca</p>}
                   </td>
                   <td className="px-6 py-4 text-slate-400 text-sm">
                     {c.phone || '-'}
@@ -394,40 +529,118 @@ const CompaniesList: React.FC = () => {
       {/* Edit Modal */}
       {editCompany && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setEditCompany(null)}>
-          <div className="bg-slate-800 rounded-2xl border border-slate-700/50 p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-slate-800 rounded-2xl border border-slate-700/50 p-6 w-full max-w-5xl shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-white mb-2">{editCompany.name}</h2>
             <p className="text-xs text-slate-500 mb-5">/{editCompany.slug}</p>
 
             <div className="space-y-4 mb-6">
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Nome</label>
-                <input value={editCompany.name} onChange={e => setEditCompany(p => ({ ...p, name: e.target.value }))}
+                <input value={editCompany.name} onChange={e => setEditCompany(p => p ? ({ ...p, name: e.target.value }) : p)}
                   className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Slug</label>
-                <input value={editCompany.slug} onChange={e => setEditCompany(p => ({ ...p, slug: e.target.value }))}
+                <input value={editCompany.slug} onChange={e => setEditCompany(p => p ? ({ ...p, slug: e.target.value.trim().toLowerCase() }) : p)}
                   className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Subdominio futuro</label>
+                  <input value={editCompany.subdomain || ''} onChange={e => setEditCompany(p => p ? ({ ...p, subdomain: e.target.value.trim().toLowerCase() }) : p)}
+                    className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    placeholder="estateflow" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">URL publica</label>
+                  <a href={`/${editCompany.slug}`} target="_blank" rel="noreferrer"
+                    className="w-full flex items-center justify-between bg-slate-700/40 border border-slate-600/50 rounded-xl px-4 py-3 text-white hover:bg-slate-700 transition-all">
+                    <span>/{editCompany.slug}</span>
+                    <span className="material-symbols-outlined text-lg">open_in_new</span>
+                  </a>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Email da empresa</label>
+                  <input value={editCompany.email || ''} onChange={e => setEditCompany(p => p ? ({ ...p, email: e.target.value }) : p)}
+                    className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Telefone</label>
+                  <input value={editCompany.phone || ''} onChange={e => setEditCompany(p => p ? ({ ...p, phone: e.target.value }) : p)}
+                    className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Status</label>
+                  <select value={editCompany.status} onChange={e => setEditCompany(p => p ? ({ ...p, status: e.target.value }) : p)}
+                    className="w-full bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+                    <option value="active">Ativa</option>
+                    <option value="inactive">Inativa</option>
+                    <option value="suspended">Suspensa</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Visibilidade</label>
+                  <button onClick={() => setEditCompany(p => p ? ({ ...p, visible: !p.visible }) : p)}
+                    className={`w-full px-4 py-3 rounded-xl text-sm font-bold transition-all ${editCompany.visible ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                    {editCompany.visible ? 'Visivel no SaaS' : 'Oculta no SaaS'}
+                  </button>
+                </div>
               </div>
 
               <div className="border-t border-slate-700/30 pt-4">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Administrador</p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center justify-between gap-3 mb-3">
                   <div>
-                    <p className="text-xs text-slate-500">Nome</p>
-                    <p className="text-white font-medium">{editCompany.admin_info?.name || '-'}</p>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Admins da imobiliaria</p>
+                    <p className="text-xs text-slate-500 mt-1">Edite admins e escolha quem recebe as cobrancas.</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Email</p>
-                    <p className="text-white font-medium">{editCompany.admin_info?.email || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Email empresa</p>
-                    <p className="text-white font-medium">{editCompany.email || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500">Telefone</p>
-                    <p className="text-white font-medium">{editCompany.phone || '-'}</p>
+                  <span className="text-xs font-bold text-slate-400">{editCompany.admins?.length || 0} admins</span>
+                </div>
+                <div className="space-y-3">
+                  {(editCompany.admins || []).map(admin => (
+                    <div key={admin.id} className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_0.8fr_auto_auto] gap-3 bg-slate-900/40 border border-slate-700/50 rounded-xl p-3">
+                      <input value={admin.name} onChange={e => setEditCompany(p => p ? ({ ...p, admins: (p.admins || []).map(a => a.id === admin.id ? { ...a, name: e.target.value } : a) }) : p)}
+                        className="bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                        placeholder="Nome" />
+                      <input value={admin.email} onChange={e => setEditCompany(p => p ? ({ ...p, admins: (p.admins || []).map(a => a.id === admin.id ? { ...a, email: e.target.value } : a) }) : p)}
+                        className="bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                        placeholder="Email" />
+                      <input value={admin.phone || ''} onChange={e => setEditCompany(p => p ? ({ ...p, admins: (p.admins || []).map(a => a.id === admin.id ? { ...a, phone: e.target.value } : a) }) : p)}
+                        className="bg-slate-700/50 border border-slate-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                        placeholder="Telefone" />
+                      <button onClick={() => handleSetBillingAdmin(editCompany.id, admin.id)}
+                        className={`px-3 py-2 rounded-lg text-xs font-black transition-all ${editCompany.billing_admin_id === admin.id ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        {editCompany.billing_admin_id === admin.id ? 'Cobranca' : 'Receber cobranca'}
+                      </button>
+                      <button onClick={() => handleUpdateAdmin(admin)}
+                        className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all">
+                        Salvar admin
+                      </button>
+                    </div>
+                  ))}
+                  {(editCompany.admins || []).length === 0 && (
+                    <p className="text-sm text-slate-500 bg-slate-900/40 rounded-xl px-4 py-3">Nenhum admin cadastrado para esta imobiliaria.</p>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-700/50 mt-5 pt-5">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Novo admin</p>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    <input value={newAdmin.name} onChange={e => setNewAdmin(p => ({ ...p, name: e.target.value }))}
+                      className="bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="Nome" />
+                    <input value={newAdmin.email} onChange={e => setNewAdmin(p => ({ ...p, email: e.target.value }))}
+                      className="bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="Email" />
+                    <input value={newAdmin.phone} onChange={e => setNewAdmin(p => ({ ...p, phone: e.target.value }))}
+                      className="bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="Telefone" />
+                    <input type="password" value={newAdmin.password} onChange={e => setNewAdmin(p => ({ ...p, password: e.target.value }))}
+                      className="bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="Senha" />
+                    <button onClick={handleAddAdmin}
+                      className="bg-sky-600 hover:bg-sky-500 text-white font-black px-4 py-3 rounded-xl transition-all">
+                      Criar admin
+                    </button>
                   </div>
                 </div>
               </div>
@@ -437,17 +650,35 @@ const CompaniesList: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-slate-500">Plano</p>
-                    <p className="text-white font-medium capitalize">{editCompany.plan || '-'}</p>
+                    <select value={editCompany.plan || 'free'} onChange={e => setEditCompany(p => p ? ({ ...p, plan: e.target.value }) : p)}
+                      className="w-full mt-1 bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+                      <option value="free">Free</option>
+                      <option value="basic">Basic</option>
+                      <option value="pro">Pro</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
                   </div>
                   <div>
                     <p className="text-xs text-slate-500">Status</p>
-                    <p className="text-white font-medium">{editCompany.subscription_status}</p>
+                    <select value={editCompany.subscription_status} onChange={e => setEditCompany(p => p ? ({ ...p, subscription_status: e.target.value }) : p)}
+                      className="w-full mt-1 bg-slate-700/50 border border-slate-600/50 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50">
+                      <option value="trialing">Teste</option>
+                      <option value="active">Ativa</option>
+                      <option value="overdue">Atrasada</option>
+                      <option value="suspended">Suspensa</option>
+                      <option value="canceled">Cancelada</option>
+                    </select>
                   </div>
+                </div>
+                <div className="mt-4 bg-slate-900/40 border border-slate-700/50 rounded-xl p-4">
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Destino atual da cobranca</p>
+                  <p className="text-white font-bold mt-1">{editCompany.billing_admin_info?.name || editCompany.admin_info?.name || editCompany.name}</p>
+                  <p className="text-sm text-slate-400">{editCompany.billing_admin_info?.email || editCompany.admin_info?.email || editCompany.email || '-'}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <button onClick={() => setEditCompany(p => ({ ...p, visible: !p.visible }))}
+                <button onClick={() => setEditCompany(p => p ? ({ ...p, visible: !p.visible }) : p)}
                   className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${editCompany.visible ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
                   {editCompany.visible ? 'Visível' : 'Oculta'}
                 </button>
@@ -456,7 +687,7 @@ const CompaniesList: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button onClick={handleEditSave} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-all">Salvar</button>
+              <button onClick={handleEditSave} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-all">Salvar imobiliaria</button>
               <button onClick={() => handleSendBillingEmail(editCompany.id)} disabled={sendingEmail}
                 className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl transition-all flex items-center gap-2">
                 {sendingEmail ? <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span className="material-symbols-outlined text-lg">mail</span>}

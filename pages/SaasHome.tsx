@@ -5,6 +5,8 @@ const SaasHome: React.FC = () => {
   const [form, setForm] = useState({ company_name: '', admin_name: '', admin_email: '', phone: '' });
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const lastTenantSlug = localStorage.getItem('estateflow_last_slug');
+  const loginHref = lastTenantSlug ? `/${lastTenantSlug}/login` : '/';
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +54,7 @@ const SaasHome: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <a href="/master" className="text-sm text-slate-400 hover:text-slate-700 font-semibold px-3 py-2 transition-colors">Master</a>
-            <a href="/login" className="text-sm text-slate-400 hover:text-slate-700 font-semibold px-3 py-2 transition-colors">Entrar</a>
+            <a href={loginHref} className="text-sm text-slate-400 hover:text-slate-700 font-semibold px-3 py-2 transition-colors">Entrar</a>
             <button onClick={() => setShowForm(true)} className="ml-1 px-5 py-2.5 bg-primary hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/25 active:scale-[0.97]">
               Criar Imobiliária
             </button>

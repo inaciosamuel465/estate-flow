@@ -28,7 +28,7 @@ async function setup() {
         await sql`CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
+            email TEXT NOT NULL,
             phone TEXT,
             role TEXT DEFAULT 'client',
             document TEXT,
@@ -36,8 +36,11 @@ async function setup() {
             favorites JSONB DEFAULT '[]',
             password TEXT,
             avatar TEXT,
+            company_id TEXT,
             created_at TIMESTAMP DEFAULT NOW()
         )`;
+        await sql`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`;
+        await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_company_email_idx ON users (company_id, lower(email))`;
         console.log('Table "users" ready.');
 
         // 3. Properties

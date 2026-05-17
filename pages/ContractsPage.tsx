@@ -440,8 +440,23 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         if (!viewingContract) return;
         setIsSendingEmail(true);
         try {
+            // Clear previous signature before re-sending
+            onUpdateContract(viewingContract.id, {
+                signatureStatus: 'pending',
+                signatureImage: null as any,
+                signedAt: null as any,
+            });
+            setViewingContract({
+                ...viewingContract,
+                signatureStatus: 'pending',
+                signatureImage: undefined,
+                signedAt: undefined,
+            });
+
             const baseUrl = settings?.appUrl || import.meta.env.VITE_APP_URL || window.location.origin;
-            const contractUrl = `${baseUrl}/contrato/${viewingContract.id}`;
+            const tenantSlug = localStorage.getItem('estateflow_last_slug');
+            const tenantPath = tenantSlug ? `/${tenantSlug}` : '';
+            const contractUrl = `${baseUrl}${tenantPath}/contrato/${viewingContract.id}`;
             const client = users.find(u => u.id === viewingContract.clientId);
             const to = client?.email;
             if (!to) {
@@ -945,6 +960,11 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                                                 {viewingContract.signatureStatus !== 'signed' && (
                                                     <button onClick={() => setIsSignatureModalOpen(true)} className="w-full py-3 bg-primary text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-primary/90 transition-all">
                                                         <span className="material-symbols-outlined">verified</span> Colher Assinatura Digital
+                                                    </button>
+                                                )}
+                                                {viewingContract.signatureStatus === 'signed' && (
+                                                    <button onClick={() => setIsSignatureModalOpen(true)} className="w-full py-3 bg-amber-600 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 hover:bg-amber-700 transition-all">
+                                                        <span className="material-symbols-outlined">redo</span> Refazer Assinatura Digital
                                                     </button>
                                                 )}
 

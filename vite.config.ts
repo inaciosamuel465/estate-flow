@@ -362,10 +362,22 @@ export default defineConfig(({ mode }) => {
                   const chunks: Buffer[] = [];
                   for await (const chunk of req) chunks.push(chunk as Buffer);
                   const body = JSON.parse(Buffer.concat(chunks).toString());
-                  const company = await sql`SELECT id, name, email FROM companies WHERE id = ${body.company_id} LIMIT 1`;
+                  await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
+                  const [company, billingAdmin, firstAdmin] = await Promise.all([
+                    sql`SELECT id, name, email, slug FROM companies WHERE id = ${body.company_id} LIMIT 1`,
+                    sql`
+                      SELECT u.name, u.email
+                      FROM company_settings cs
+                      JOIN users u ON u.id = cs.billing_admin_id AND u.company_id = cs.company_id
+                      WHERE cs.company_id = ${body.company_id}
+                      LIMIT 1
+                    `,
+                    sql`SELECT name, email FROM users WHERE company_id = ${body.company_id} AND role = 'admin' ORDER BY name LIMIT 1`,
+                  ]);
                   if (company.length === 0) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Company not found' })); return; }
-                  console.log(`[SIMULATED BILLING EMAIL] To: ${company[0].email}, Company: ${company[0].name}`);
-                  res.end(JSON.stringify({ success: true, message: `Email de cobranca enviado para ${company[0].email}` }));
+                  const recipient = billingAdmin[0]?.email || firstAdmin[0]?.email || company[0].email;
+                  console.log(`[SIMULATED BILLING EMAIL] To: ${recipient}, Company: ${company[0].name}, URL: /${company[0].slug || ''}/plans`);
+                  res.end(JSON.stringify({ success: true, message: `Email de cobranca enviado para ${recipient}` }));
                 } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }

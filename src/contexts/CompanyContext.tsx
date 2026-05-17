@@ -133,6 +133,7 @@ export const CompanyProvider: React.FC<Props> = ({ children }) => {
     localStorage.setItem(COMPANY_DATA_KEY, JSON.stringify(c));
     localStorage.setItem(COMPANY_SETTINGS_KEY, JSON.stringify(s));
     if (c.id) localStorage.setItem(COMPANY_ID_KEY, c.id);
+    if (c.slug) localStorage.setItem('estateflow_last_slug', c.slug);
   }, []);
 
   const clearCompany = useCallback(() => {

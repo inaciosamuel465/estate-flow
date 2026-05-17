@@ -159,19 +159,32 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-    const result = await sql`SELECT * FROM users WHERE id = ${id}`;
+    const companyId = getCompanyId();
+    const result = companyId
+        ? await sql`SELECT * FROM users WHERE id = ${id} AND company_id = ${companyId}`
+        : await sql`SELECT * FROM users WHERE id = ${id}`;
     if (result.length === 0) return null;
     return { ...result[0], createdAt: result[0].created_at } as unknown as User;
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-    const result = await sql`SELECT * FROM users WHERE email = ${email}`;
+    const companyId = getCompanyId();
+    const result = companyId
+        ? await sql`SELECT * FROM users WHERE email = ${email} AND company_id = ${companyId}`
+        : await sql`SELECT * FROM users WHERE email = ${email}`;
     if (result.length === 0) return null;
     return { ...result[0], createdAt: result[0].created_at } as unknown as User;
 }
 
+async function ensureTenantUserSchema(): Promise<void> {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id TEXT`;
+    await sql`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_company_email_idx ON users (company_id, lower(email))`;
+}
+
 export async function upsertUser(user: User): Promise<void> {
     const companyId = (user as any).company_id || getCompanyId() || 'default';
+    await ensureTenantUserSchema();
     await sql`
         INSERT INTO users (id, name, email, phone, role, document, address, favorites, password, avatar, company_id)
         VALUES (${user.id}, ${user.name}, ${user.email}, ${(user as any).phone || null}, ${user.role}, 
@@ -323,8 +336,13 @@ export async function updateContract(id: string, updates: Partial<Contract>): Pr
         await sql`UPDATE contracts SET signature_status = ${updates.signatureStatus} WHERE id = ${id}${cs}`;
     if (updates.customContent !== undefined)
         await sql`UPDATE contracts SET custom_content = ${updates.customContent} WHERE id = ${id}${cs}`;
-    if (updates.signatureImage !== undefined)
-        await sql`UPDATE contracts SET signature_image = ${updates.signatureImage}, signed_at = NOW() WHERE id = ${id}${cs}`;
+    if ('signatureImage' in updates) {
+        if (updates.signatureImage === null) {
+            await sql`UPDATE contracts SET signature_image = NULL, signed_at = NULL WHERE id = ${id}${cs}`;
+        } else if (updates.signatureImage !== undefined) {
+            await sql`UPDATE contracts SET signature_image = ${updates.signatureImage}, signed_at = NOW() WHERE id = ${id}${cs}`;
+        }
+    }
     if (updates.installmentsPaid !== undefined)
         await sql`UPDATE contracts SET installments_paid = ${updates.installmentsPaid} WHERE id = ${id}${cs}`;
     if (updates.value !== undefined)

@@ -217,6 +217,10 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
             // Disparar email de confirmação ao lead e notificação ao admin
             const agencyEmail = propertyData?.agency?.email || '';
             if (agencyEmail || contactForm.email) {
+                const firstPathSegment = window.location.pathname.split('/').filter(Boolean)[0] || '';
+                const adminAnalyticsUrl = firstPathSegment
+                    ? `${window.location.origin}/${firstPathSegment}/admin/ai-analytics`
+                    : `${window.location.origin}/`;
                 const emailPayload = {
                     // Email para o admin/imobiliária
                     to: agencyEmail,
@@ -232,7 +236,7 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
                                 <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Mensagem</td><td style="padding: 8px; border: 1px solid #e2e8f0;">${contactForm.message || 'N/A'}</td></tr>
                                 <tr><td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: bold; background: #f8fafc;">Score de Intenção</td><td style="padding: 8px; border: 1px solid #e2e8f0; color: ${intentScore >= 80 ? '#dc2626' : '#d97706'};"><strong>${intentScore}/100</strong></td></tr>
                             </table>
-                            <a href="${window.location.origin}/admin/ai-analytics" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver Lead no CRM</a>
+                            <a href="${adminAnalyticsUrl}" style="display: inline-block; padding: 12px 24px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">Ver Lead no CRM</a>
                         </div>
                     `
                 };

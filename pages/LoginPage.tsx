@@ -43,7 +43,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
     try {
       if (isLoginMode) {
         // Login com Firebase
-        const response = await loginUser(email, password);
+        const response = await loginUser(email, password, companyId);
         if (response.user) {
           onLoginSuccess(response.user);
         } else {
@@ -65,7 +65,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
           role: regRole
         };
 
-        const response = await registerUser(data);
+        const response = await registerUser(data, companyId);
         if (response.user) {
           onRegisterSuccess(response.user);
         } else {
