@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import crypto from 'crypto';
 import fs from 'fs';
 
 const envFile = fs.readFileSync('.env.local', 'utf8');
@@ -16,10 +17,7 @@ async function seedMaster() {
   }
 
   const password = 'admin123';
-  const msgUint8 = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
 
   await sql`
     INSERT INTO master_users (id, name, email, password, role)

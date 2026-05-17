@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
+import crypto from 'crypto';
 import { verifyRequest } from './_lib/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -25,10 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const existingEmail = await sql`SELECT id FROM agency_requests WHERE admin_email = ${admin_email} LIMIT 1`;
       if (existingEmail.length > 0) return res.status(400).json({ error: 'Este email ja possui uma solicitacao' });
 
-      const msgUint8 = new TextEncoder().encode(admin_password);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      const hashedPassword = crypto.createHash('sha256').update(admin_password).digest('hex');
 
       const id = 'req_' + Date.now();
       await sql`

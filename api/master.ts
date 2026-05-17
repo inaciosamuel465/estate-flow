@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 import { signToken, verifyRequest } from './_lib/auth';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -19,10 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (result.length === 0) return res.status(401).json({ error: 'Credenciais invalidas' });
 
       const user = result[0];
-      const msgUint8 = new TextEncoder().encode(password);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashedInput = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      const hashedInput = crypto.createHash('sha256').update(password).digest('hex');
 
       if (user.password !== hashedInput) return res.status(401).json({ error: 'Credenciais invalidas' });
 
