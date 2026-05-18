@@ -102,7 +102,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                 </div>
                             </div>
 
-                            <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto no-scrollbar pb-2 lg:pb-0">
+                            <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 custom-scrollbar">
                                 <button
                                     onClick={() => setActiveTab('profile')}
                                     className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'profile' ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-slate-600 hover:bg-slate-50'}`}

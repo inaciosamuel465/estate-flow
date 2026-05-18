@@ -7,6 +7,7 @@
   --color-background-light: #F8F9FC;
   --color-background-dark: #12141a;
   --color-text-secondary: #94a3b8;
+  --breakpoint-xs: 480px;
 }
 
 /* Force class-based dark mode for Tailwind 4 */
@@ -153,5 +154,9 @@ textarea {
   .step-line {
     display: none;
   }
+}
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 

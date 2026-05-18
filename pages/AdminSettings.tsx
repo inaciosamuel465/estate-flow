@@ -328,7 +328,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                 {/* Sidebar de Navegação / Tab Bar Mobile */}
-                <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-2 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto no-scrollbar md:custom-scrollbar flex-shrink-0">
+                <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-2 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar flex-shrink-0">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}

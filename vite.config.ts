@@ -46,14 +46,68 @@ export default defineConfig(({ mode }) => {
               }
 
               if (req.url === '/api/push/subscribe') {
-                // Simulação de sucesso
-                res.end(JSON.stringify({ success: true }));
+                try {
+                  const sql = neon(env.VITE_DATABASE_URL);
+                  const chunks: Buffer[] = [];
+                  for await (const chunk of req) chunks.push(chunk as Buffer);
+                  const body = JSON.parse(Buffer.concat(chunks).toString());
+                  const { subscription, userId, companyId } = body;
+                  if (!subscription || !subscription.endpoint) {
+                    res.statusCode = 400; res.end(JSON.stringify({ error: 'Subscription missing' })); return;
+                  }
+                  await sql`
+                    INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id, company_id)
+                    VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${userId || null}, ${companyId || 'default'})
+                    ON CONFLICT (endpoint) DO UPDATE SET
+                      user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+                  `;
+                  res.end(JSON.stringify({ success: true }));
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }
 
               if (req.url === '/api/push/send' || req.url === '/api/push/broadcast') {
-                // Simulação de disparo de push
-                res.end(JSON.stringify({ success: true, count: 1 }));
+                try {
+                  const isBroadcast = req.url === '/api/push/broadcast';
+                  const auth = req.headers.authorization || '';
+                  if (!isBroadcast) {
+                    const tokenPayload = auth ? JSON.parse(atob(auth.replace('Bearer ', ''))) : null;
+                    if (!tokenPayload || tokenPayload.exp < Date.now()) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Nao autorizado' })); return; }
+                  }
+                  const sql = neon(env.VITE_DATABASE_URL);
+                  const chunks: Buffer[] = [];
+                  for await (const chunk of req) chunks.push(chunk as Buffer);
+                  const body = JSON.parse(Buffer.concat(chunks).toString());
+                  const { title, body: pushBody, url, userId } = body;
+                  const vapidPublic = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
+                  const vapidPrivate = env.VAPID_PRIVATE_KEY;
+                  if (!vapidPublic || !vapidPrivate) {
+                    res.statusCode = 500; res.end(JSON.stringify({ error: 'Push not configured' })); return;
+                  }
+                  const webpush = await import('web-push');
+                  webpush.default.setVapidDetails('mailto:contato@estateflow.com.br', vapidPublic, vapidPrivate);
+                  let subscriptions;
+                  if (userId && !isBroadcast) {
+                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId}`;
+                  } else {
+                    subscriptions = await sql`SELECT * FROM push_subscriptions`;
+                  }
+                  const payload = JSON.stringify({ title, body: pushBody, url });
+                  const sendPromises = subscriptions.map(async (sub: any) => {
+                    try {
+                      await webpush.default.sendNotification({
+                        endpoint: sub.endpoint,
+                        keys: { p256dh: sub.p256dh, auth: sub.auth }
+                      }, payload);
+                    } catch (error: any) {
+                      if (error.statusCode === 410 || error.statusCode === 404) {
+                        await sql`DELETE FROM push_subscriptions WHERE endpoint = ${sub.endpoint}`;
+                      }
+                    }
+                  });
+                  await Promise.all(sendPromises);
+                  res.end(JSON.stringify({ success: true, count: subscriptions.length }));
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }
 
@@ -419,7 +473,8 @@ export default defineConfig(({ mode }) => {
                     </div>
                   `;
                   // Actually send via the email API (same as production)
-                  const baseUrl = `http://localhost:${port || 5173}`;
+                  const svPort = server.config.server.port || 5173;
+                  const baseUrl = `http://localhost:${svPort}`;
                   const sendRes = await fetch(`${baseUrl}/api/email/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': auth },

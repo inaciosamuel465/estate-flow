@@ -269,7 +269,7 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
                             ))}
                         </div>
                     ) : (
-                        <div className="bg-white dark:bg-[#1a1d23] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto custom-scrollbar mb-20">
+                        <div className="bg-white dark:bg-[#1a1d23] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto custom-scrollbar mb-6 lg:mb-20">
                             <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead>
                                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#111318]">

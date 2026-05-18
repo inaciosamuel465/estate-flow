@@ -191,7 +191,7 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                             <p className="text-right mb-8 sm:mb-12 font-serif italic text-xs sm:text-sm text-slate-600">
                                 São Paulo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}.
                             </p>
-                                <div className="grid grid-cols-2 gap-4 sm:gap-8">
+                                <div className="grid grid-cols-1 xs:grid-cols-2 gap-4 sm:gap-8">
                                 <div className="text-center">
                                     <div className="h-14 sm:h-20 flex flex-col items-center justify-center mb-2">
                                         {contract.ownerSignatureImage ? (

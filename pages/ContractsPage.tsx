@@ -659,6 +659,21 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
     const [isEditingText, setIsEditingText] = useState(false);
     const [currentText, setCurrentText] = useState('');
     const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+    const [a4Scale, setA4Scale] = useState(1);
+    const previewContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const updateScale = () => {
+            if (previewContainerRef.current) {
+                const containerWidth = previewContainerRef.current.clientWidth - 32;
+                const a4WidthPx = 210 * 3.7795;
+                setA4Scale(containerWidth < a4WidthPx ? containerWidth / a4WidthPx : 1);
+            }
+        };
+        updateScale();
+        window.addEventListener('resize', updateScale);
+        return () => window.removeEventListener('resize', updateScale);
+    }, [viewingContract]);
 
     // --- Helpers ---
 
@@ -1449,7 +1464,7 @@ Este é um email automático. Por favor não responda.`;
                                              </button>
                                          </div>
                                          <textarea 
-                                             className="w-full h-[500px] p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-black/20 font-serif text-sm leading-relaxed focus:outline-none focus:border-primary/50"
+                                             className="w-full min-h-[300px] max-h-[70vh] h-[500px] p-6 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-black/20 font-serif text-sm leading-relaxed focus:outline-none focus:border-primary/50"
                                              value={currentText}
                                              onChange={(e) => setCurrentText(e.target.value)}
                                          />
@@ -1470,9 +1485,9 @@ Este é um email automático. Por favor não responda.`;
                     {viewMode === 'view' && viewingContract && (
                         <div className="flex flex-col lg:flex-row gap-8 h-full min-h-0">
                             {/* Document Preview (A4 Simulado) */}
-                            <div className="flex-1 rounded-2xl p-4 lg:p-8 overflow-y-auto flex justify-center bg-slate-200/50 dark:bg-black/20 custom-scrollbar relative">
+                            <div ref={previewContainerRef} className="flex-1 rounded-2xl p-4 lg:p-8 overflow-x-auto overflow-y-auto flex justify-start lg:justify-center bg-slate-200/50 dark:bg-black/20 custom-scrollbar relative">
                                 
-                                <div id="printable-area" className="flex flex-col gap-0 w-full items-center">
+                                <div id="printable-area" className="flex flex-col gap-0 items-center" style={{ transform: `scale(${a4Scale})`, transformOrigin: 'top center', minWidth: a4Scale < 1 ? '210mm' : undefined }}>
                                     {isEditingText ? (
                                         <div className="bg-white text-black w-[210mm] min-h-[297mm] shadow-2xl relative mx-auto flex flex-col p-[25mm]">
                                             <textarea
