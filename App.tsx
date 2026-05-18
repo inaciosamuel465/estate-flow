@@ -516,10 +516,15 @@ const App: React.FC = () => {
   };
 
   const handleUpdateContract = async (id: number | string, updatedData: Partial<Contract>) => {
-    setContracts(prev => prev.map(c =>
-      c.id === id ? { ...c, ...updatedData } : c
-    ));
-    await updateContractService(String(id), updatedData);
+    try {
+      await updateContractService(String(id), updatedData);
+      setContracts(prev => prev.map(c =>
+        c.id === id ? { ...c, ...updatedData } : c
+      ));
+    } catch (e) {
+      console.error('Erro ao atualizar contrato no servidor:', e);
+      throw e;
+    }
   };
 
   const handleDeleteContract = async (id: number | string) => {

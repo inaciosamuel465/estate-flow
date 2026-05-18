@@ -213,8 +213,17 @@ export async function deleteUser(id: string): Promise<void> {
 // CONTRACTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+async function ensureContractSchema(): Promise<void> {
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signature_image TEXT`;
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP`;
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS owner_signature_image TEXT`;
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS owner_signed_at TIMESTAMP`;
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS owner_signature_status TEXT DEFAULT 'pending'`;
+}
+
 export async function getContracts(): Promise<Contract[]> {
     const companyId = getCompanyId();
+    await ensureContractSchema();
     const result = companyId
         ? await sql`
             SELECT c.*, p.title as property_title, p.image as property_image,
@@ -256,6 +265,9 @@ export async function getContracts(): Promise<Contract[]> {
         signatureStatus: row.signature_status || 'pending',
         signatureImage: row.signature_image || undefined,
         signedAt: row.signed_at || undefined,
+        ownerSignatureStatus: row.owner_signature_status || 'pending',
+        ownerSignatureImage: row.owner_signature_image || undefined,
+        ownerSignedAt: row.owner_signed_at || undefined,
         nextPaymentStatus: row.next_payment_status || 'pending',
         templateType: row.template_type,
         customContent: row.custom_content,
@@ -264,6 +276,7 @@ export async function getContracts(): Promise<Contract[]> {
 }
 
 export async function getContractById(id: string): Promise<Contract | null> {
+    await ensureContractSchema();
     const result = await sql`
         SELECT c.*, p.title as property_title, p.image as property_image,
                u_client.name as client_name, u_client.phone as client_phone,
@@ -295,6 +308,9 @@ export async function getContractById(id: string): Promise<Contract | null> {
         signatureStatus: row.signature_status || 'pending',
         signatureImage: row.signature_image || undefined,
         signedAt: row.signed_at || undefined,
+        ownerSignatureStatus: row.owner_signature_status || 'pending',
+        ownerSignatureImage: row.owner_signature_image || undefined,
+        ownerSignedAt: row.owner_signed_at || undefined,
         nextPaymentStatus: row.next_payment_status || 'pending',
         templateType: row.template_type,
         customContent: row.custom_content,
@@ -326,27 +342,71 @@ export async function addContract(contract: Contract): Promise<string> {
 }
 
 export async function updateContract(id: string, updates: Partial<Contract>): Promise<void> {
+    await ensureContractSchema();
     const cid = getCompanyId();
-    const cs = cid ? sql` AND company_id = ${cid}` : sql``;
-    if (updates.status !== undefined) 
-        await sql`UPDATE contracts SET status = ${updates.status} WHERE id = ${id}${cs}`;
-    if (updates.nextPaymentStatus !== undefined)
-        await sql`UPDATE contracts SET next_payment_status = ${updates.nextPaymentStatus} WHERE id = ${id}${cs}`;
-    if (updates.signatureStatus !== undefined)
-        await sql`UPDATE contracts SET signature_status = ${updates.signatureStatus} WHERE id = ${id}${cs}`;
-    if (updates.customContent !== undefined)
-        await sql`UPDATE contracts SET custom_content = ${updates.customContent} WHERE id = ${id}${cs}`;
+    const sets: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    const addParam = (val: any) => {
+        params.push(val);
+        return `$${paramIdx++}`;
+    };
+
+    if (updates.status !== undefined) {
+        sets.push(`status = ${addParam(updates.status)}`);
+    }
+    if (updates.nextPaymentStatus !== undefined) {
+        sets.push(`next_payment_status = ${addParam(updates.nextPaymentStatus)}`);
+    }
+    if (updates.signatureStatus !== undefined) {
+        sets.push(`signature_status = ${addParam(updates.signatureStatus)}`);
+    }
+    if (updates.customContent !== undefined) {
+        sets.push(`custom_content = ${addParam(updates.customContent)}`);
+    }
     if ('signatureImage' in updates) {
         if (updates.signatureImage === null) {
-            await sql`UPDATE contracts SET signature_image = NULL, signed_at = NULL WHERE id = ${id}${cs}`;
+            sets.push('signature_image = NULL');
+            sets.push('signed_at = NULL');
         } else if (updates.signatureImage !== undefined) {
-            await sql`UPDATE contracts SET signature_image = ${updates.signatureImage}, signed_at = NOW() WHERE id = ${id}${cs}`;
+            sets.push(`signature_image = ${addParam(updates.signatureImage)}`);
+            if (updates.signedAt !== undefined) {
+                sets.push(`signed_at = ${addParam(updates.signedAt)}`);
+            } else {
+                sets.push('signed_at = NOW()');
+            }
         }
     }
-    if (updates.installmentsPaid !== undefined)
-        await sql`UPDATE contracts SET installments_paid = ${updates.installmentsPaid} WHERE id = ${id}${cs}`;
-    if (updates.value !== undefined)
-        await sql`UPDATE contracts SET value = ${Number(updates.value)} WHERE id = ${id}${cs}`;
+    if ('ownerSignatureImage' in updates) {
+        if (updates.ownerSignatureImage === null) {
+            sets.push('owner_signature_image = NULL');
+            sets.push('owner_signed_at = NULL');
+            sets.push(`owner_signature_status = ${addParam('pending')}`);
+        } else if (updates.ownerSignatureImage !== undefined) {
+            sets.push(`owner_signature_image = ${addParam(updates.ownerSignatureImage)}`);
+            if (updates.ownerSignedAt !== undefined) {
+                sets.push(`owner_signed_at = ${addParam(updates.ownerSignedAt)}`);
+            } else {
+                sets.push('owner_signed_at = NOW()');
+            }
+            sets.push(`owner_signature_status = ${addParam('signed')}`);
+        }
+    }
+    if (updates.installmentsPaid !== undefined) {
+        sets.push(`installments_paid = ${addParam(updates.installmentsPaid)}`);
+    }
+    if (updates.value !== undefined) {
+        sets.push(`value = ${addParam(Number(updates.value))}`);
+    }
+
+    if (sets.length === 0) return;
+
+    const whereClause = cid ? ` WHERE id = $${paramIdx} AND company_id = $${paramIdx + 1}` : ` WHERE id = $${paramIdx}`;
+    params.push(id);
+    if (cid) params.push(cid);
+
+    await sql.query(`UPDATE contracts SET ${sets.join(', ')}${whereClause}`, params);
 }
 
 export async function deleteContract(id: string): Promise<void> {

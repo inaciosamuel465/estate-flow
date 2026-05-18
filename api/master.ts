@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { signToken, verifyRequest } from './_lib/auth.js';
 
@@ -105,6 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
       const to = admin?.email || c.email;
       const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
+      const text = `Olá ${admin?.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
       const html = `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <div style="background:#1e293b;padding:32px;border-radius:16px 16px 0 0;text-align:center;">
@@ -126,56 +126,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               <a href="${plansUrl}" style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:12px;text-decoration:none;font-weight:bold;display:inline-block;">Gerenciar Assinatura</a>
             </div>
             <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
-            <p style="color:#94a3b8;font-size:12px;">EstateFlow Suite — Gestão Imobiliária</p>
+            <p style="color:#94a3b8;font-size:12px;">EstateFlow Suite &mdash; Gestão Imobiliária</p>
           </div>
         </div>
       `;
 
-      // SMTP config: try company settings first, fallback to env
-      let smtpConfig: { host: string; port: number; secure: boolean; user: string; pass: string; senderName: string; senderEmail: string } | null = null;
-      try {
-        const cs = await sql`SELECT smtp_host, smtp_port, smtp_secure, smtp_user, smtp_password, email_sender_name, email_sender_address FROM company_settings WHERE company_id = ${company_id} LIMIT 1`;
-        const s = cs[0];
-        if (s?.smtp_host && s?.smtp_user && s?.smtp_password) {
-          smtpConfig = {
-            host: s.smtp_host,
-            port: Number(s.smtp_port) || 587,
-            secure: s.smtp_secure === true,
-            user: s.smtp_user,
-            pass: s.smtp_password,
-            senderName: s.email_sender_name || 'EstateFlow',
-            senderEmail: s.email_sender_address || s.smtp_user,
-          };
-        }
-      } catch (_) { /* fall through */ }
+      // Reuse the same email API that works for contract emails
+      const baseUrl = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers['x-forwarded-host'] || req.headers.host || 'estate-flow-amber.vercel.app'}`;
+      const sendRes = await fetch(`${baseUrl}/api/email/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': req.headers.authorization || '',
+        },
+        body: JSON.stringify({ to, subject, text, html, company_id }),
+      });
+      const sendData = await sendRes.json();
 
-      const config = smtpConfig || (process.env.SMTP_HOST ? {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
-        senderName: 'EstateFlow Suite',
-        senderEmail: process.env.SMTP_USER || '',
-      } : null);
-
-      if (config) {
-        const transporter = nodemailer.createTransport({
-          host: config.host,
-          port: config.port,
-          secure: config.secure,
-          auth: { user: config.user, pass: config.pass },
-          tls: { rejectUnauthorized: false },
-        });
-        const info = await transporter.sendMail({
-          from: `"${config.senderName}" <${config.senderEmail}>`,
-          to, subject, html,
-        });
-        console.log(`[BILLING EMAIL] Sent to ${to}, messageId: ${info.messageId}`);
+      if (sendData.success) {
+        console.log(`[BILLING EMAIL] Sent to ${to}, messageId: ${sendData.messageId}`);
         return res.status(200).json({ success: true, message: `Email de cobrança enviado para ${to}` });
       } else {
-        console.log(`[BILLING EMAIL] To: ${to}, Subject: ${subject}, Company: ${c.name}, Plan: R$ ${planPrice.toFixed(2)}`);
-        return res.status(200).json({ success: true, message: `Email de cobrança registrado para ${to} (SMTP não configurado)` });
+        console.error('[BILLING EMAIL] API send failed:', sendData.error);
+        return res.status(500).json({ success: false, error: `Falha ao enviar: ${sendData.error || 'erro desconhecido'}` });
       }
     } catch (error) {
       console.error('Send billing email error:', error);

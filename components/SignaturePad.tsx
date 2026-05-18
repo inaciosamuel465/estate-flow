@@ -10,6 +10,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
     const [isDrawing, setIsDrawing] = useState(false);
     const [mode, setMode] = useState<'draw' | 'upload'>('draw');
     const [hasContent, setHasContent] = useState(false);
+    const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
 
     useEffect(() => {
         if (mode === 'draw' && canvasRef.current) {
@@ -74,8 +75,11 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
     };
 
     const handleSave = () => {
-        if (mode === 'draw' && canvasRef.current && hasContent) {
+        if (!hasContent) return;
+        if (mode === 'draw' && canvasRef.current) {
             onSave(canvasRef.current.toDataURL());
+        } else if (mode === 'upload' && uploadedPreviewUrl) {
+            onSave(uploadedPreviewUrl);
         }
     };
 
@@ -85,7 +89,8 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
             const reader = new FileReader();
             reader.onload = (event) => {
                 if (event.target?.result) {
-                    onSave(event.target.result as string);
+                    setUploadedPreviewUrl(event.target.result as string);
+                    setHasContent(true);
                 }
             };
             reader.readAsDataURL(file);
@@ -102,13 +107,13 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
                     </div>
                     <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                         <button 
-                            onClick={() => setMode('draw')}
+                            onClick={() => { setMode('draw'); setUploadedPreviewUrl(''); setHasContent(false); }}
                             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'draw' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500'}`}
                         >
                             Desenhar
                         </button>
                         <button 
-                            onClick={() => setMode('upload')}
+                            onClick={() => { setMode('upload'); clearCanvas(); }}
                             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'upload' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500'}`}
                         >
                             Subir Imagem
@@ -138,13 +143,25 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="w-full py-10 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-black/20">
-                            <span className="material-symbols-outlined text-5xl text-slate-300 mb-4">upload_file</span>
-                            <p className="text-sm text-slate-500 mb-4">Escolha um arquivo PNG ou JPG com sua assinatura</p>
-                            <label className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-xl font-bold text-sm cursor-pointer transition-all shadow-lg shadow-primary/20">
-                                Selecionar Arquivo
-                                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-                            </label>
+                        <div className="w-full">
+                            {uploadedPreviewUrl ? (
+                                <div className="flex flex-col items-center">
+                                    <img src={uploadedPreviewUrl} className="max-h-48 object-contain border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-4 bg-slate-50 dark:bg-black/20" alt="Preview assinatura" />
+                                    <div className="mt-4 flex justify-between w-full">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Preview da Assinatura</p>
+                                        <button onClick={() => { setUploadedPreviewUrl(''); setHasContent(false); }} className="text-xs font-bold text-rose-500 hover:underline">Remover</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="w-full py-10 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50 dark:bg-black/20">
+                                    <span className="material-symbols-outlined text-5xl text-slate-300 mb-4">upload_file</span>
+                                    <p className="text-sm text-slate-500 mb-4">Escolha um arquivo PNG ou JPG com sua assinatura</p>
+                                    <label className="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-xl font-bold text-sm cursor-pointer transition-all shadow-lg shadow-primary/20">
+                                        Selecionar Arquivo
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                    </label>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -153,7 +170,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
                     <button onClick={onCancel} className="flex-1 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-600 dark:text-white hover:bg-white dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                     <button 
                         onClick={handleSave}
-                        disabled={mode === 'draw' && !hasContent}
+                        disabled={!hasContent}
                         className="flex-1 py-3 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 transition-all"
                     >
                         Confirmar Assinatura

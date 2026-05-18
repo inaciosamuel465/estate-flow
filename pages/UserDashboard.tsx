@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Property, Contract } from '../src/types';
+import SignaturePad from '../components/SignaturePad';
 
 interface UserDashboardProps {
     user: User;
@@ -25,6 +26,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     const [activeTab, setActiveTab] = useState<'profile' | 'favorites' | 'listings' | 'juridico'>('profile');
     const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
     const [isSigning, setIsSigning] = useState(false);
+    const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+    const [signingContract, setSigningContract] = useState<Contract | null>(null);
 
     // Filtrar imóveis do proprietário (se for owner)
     const myListings = properties.filter(p => p.ownerId === user.id);
@@ -33,9 +36,27 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
     const myContracts = contracts.filter(c => c.clientId === user.id || c.ownerId === user.id);
 
-    const handleSignContract = async (contract: Contract) => {
-        if (onUpdateContract) {
-            await onUpdateContract(contract.id, { signatureStatus: 'signed', signedAt: new Date().toISOString() });
+    const handleSignContract = (contract: Contract) => {
+        setSigningContract(contract);
+        setIsSignatureModalOpen(true);
+    };
+
+    const handleSignatureSave = async (dataUrl: string) => {
+        if (!signingContract || !onUpdateContract) return;
+        setIsSigning(true);
+        try {
+            await onUpdateContract(signingContract.id, {
+                signatureStatus: 'signed',
+                signatureImage: dataUrl,
+                signedAt: new Date().toISOString(),
+                status: 'active'
+            });
+            setIsSignatureModalOpen(false);
+            setSigningContract(null);
+        } catch (e) {
+            alert('Erro ao salvar assinatura. Tente novamente.');
+        } finally {
+            setIsSigning(false);
         }
     };
 
@@ -358,7 +379,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                         )}
                     </div>
                 </div>
-            </main >
+            </main>
+
+            {isSignatureModalOpen && (
+                <SignaturePad
+                    onSave={handleSignatureSave}
+                    onCancel={() => { setIsSignatureModalOpen(false); setSigningContract(null); }}
+                />
+            )}
         </div >
     );
 };

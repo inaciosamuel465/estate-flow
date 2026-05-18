@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getContractById, updateContract, getProperties } from '../src/services/dataService';
-import { generateContractPDF } from '../src/services/pdfService';
+import { generateContractPDF, downloadPdfBlob } from '../src/services/pdfService';
 import SignaturePad from '../components/SignaturePad';
 import type { Contract, Property, User } from '../src/types';
 
@@ -16,6 +16,8 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
     const [error, setError] = useState('');
     const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
     const [signingUp, setSigningUp] = useState(false);
+    const [isSavingContract, setIsSavingContract] = useState(false);
+    const [showSavedFeedback, setShowSavedFeedback] = useState(false);
 
     const agencyName = settings.companyName || 'EstateFlow Negócios Imobiliários Ltda.';
     const agencyCnpj = settings.agencyCnpj || '';
@@ -51,12 +53,16 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
         if (!contract) return;
         setSigningUp(true);
         try {
-            await updateContract(String(contract.id), {
+            const saved = await updateContract(String(contract.id), {
                 signatureStatus: 'signed',
                 signatureImage: dataUrl,
                 signedAt: new Date().toISOString(),
                 status: 'active'
             });
+            if (!saved) {
+                alert('Erro ao salvar assinatura no banco de dados. Tente novamente.');
+                return;
+            }
             setContract({
                 ...contract,
                 signatureStatus: 'signed',
@@ -66,9 +72,32 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
             });
             setIsSignatureModalOpen(false);
         } catch (e) {
-            alert('Erro ao salvar assinatura. Tente novamente.');
+            alert('Erro ao salvar assinatura. Verifique sua conexão e tente novamente.');
         } finally {
             setSigningUp(false);
+        }
+    };
+
+    const handleSaveContract = async () => {
+        if (!contract) return;
+        setIsSavingContract(true);
+        try {
+            const saved = await updateContract(String(contract.id), {
+                signatureStatus: contract.signatureStatus,
+                signatureImage: contract.signatureImage,
+                signedAt: contract.signedAt,
+                status: contract.status
+            });
+            if (!saved) {
+                alert('Erro ao salvar contrato. Tente novamente.');
+                return;
+            }
+            setShowSavedFeedback(true);
+            setTimeout(() => setShowSavedFeedback(false), 3000);
+        } catch (e) {
+            alert('Erro ao salvar contrato. Tente novamente.');
+        } finally {
+            setIsSavingContract(false);
         }
     };
 
@@ -77,7 +106,7 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
         const tenant: User = { id: contract.clientId, name: contract.clientName, phone: contract.clientPhone, email: '', role: 'client', avatar: '', favorites: [] } as User;
         const owner: User = { id: contract.ownerId, name: contract.ownerName, phone: contract.ownerPhone, email: '', role: 'owner', avatar: '', favorites: [] } as User;
         try {
-            await generateContractPDF(
+            const doc = await generateContractPDF(
                 contract,
                 property || { id: contract.propertyId, title: contract.propertyTitle } as Property,
                 tenant,
@@ -91,6 +120,8 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                 agencyStampUrl,
                 agencyStampName
             );
+            const fileName = `Contrato_${contract.type === 'rent' ? 'Locacao' : 'Venda'}_${contract.propertyTitle.replace(/\s+/g, '_')}.pdf`;
+            downloadPdfBlob(doc, fileName);
         } catch (e) {
             alert('Erro ao gerar PDF.');
         }
@@ -160,18 +191,20 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                             <p className="text-right mb-8 sm:mb-12 font-serif italic text-xs sm:text-sm text-slate-600">
                                 São Paulo, {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}.
                             </p>
-                            <div className="grid grid-cols-2 gap-6 sm:gap-12">
+                                <div className="grid grid-cols-2 gap-4 sm:gap-8">
                                 <div className="text-center">
-                                    <div className="h-10 sm:h-14 flex items-center justify-center mb-2">
-                                        {agencyStampUrl ? (
-                                            <img src={agencyStampUrl} className="h-10 sm:h-14 object-contain" alt="Rubrica" />
+                                    <div className="h-14 sm:h-20 flex flex-col items-center justify-center mb-2">
+                                        {contract.ownerSignatureImage ? (
+                                            <img src={contract.ownerSignatureImage} className="h-8 sm:h-12 object-contain" alt="Assinatura Imobiliária" />
+                                        ) : agencyStampUrl ? (
+                                            <img src={agencyStampUrl} className="h-8 sm:h-12 object-contain" alt="Rubrica" />
                                         ) : (
-                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Assinatura Administradora]</span>
+                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Pendente]</span>
                                         )}
                                     </div>
                                     <div className="border-t border-black w-full pt-1">
                                         <p className="font-bold text-[10px] sm:text-xs uppercase">{agencyStampName}</p>
-                                        <p className="text-[8px] sm:text-[10px] text-slate-500">Representante Legal</p>
+                                        <p className="text-[8px] sm:text-[10px] text-slate-500">Imobiliária</p>
                                     </div>
                                 </div>
                                 <div className="text-center">
@@ -179,7 +212,7 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                                         {contract.signatureImage ? (
                                             <img src={contract.signatureImage} className="h-10 sm:h-14 object-contain" alt="Assinatura" />
                                         ) : (
-                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Pendente Assinatura Cliente]</span>
+                                            <span className="text-[8px] sm:text-xs text-slate-300 font-bold uppercase tracking-widest italic">[Pendente]</span>
                                         )}
                                     </div>
                                     <div className="border-t border-black w-full pt-1">
@@ -212,10 +245,23 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                     >
                         <span className="material-symbols-outlined text-xl sm:text-2xl">download</span> Baixar PDF
                     </button>
+                    {contract.signatureStatus === 'signed' && (
+                        <button
+                            onClick={handleSaveContract}
+                            disabled={isSavingContract}
+                            className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-emerald-600 text-white rounded-xl font-bold shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm sm:text-base"
+                        >
+                            {isSavingContract ? (
+                                <><span className="size-4 sm:size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Salvando...</>
+                            ) : (
+                                <><span className="material-symbols-outlined text-xl sm:text-2xl">save</span> {showSavedFeedback ? '✓ Salvo' : 'Salvar Contrato'}</>
+                            )}
+                        </button>
+                    )}
                 </div>
 
                 {contract.signatureStatus === 'signed' && (
-                    <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                    <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-3">
                         <p className="text-emerald-800 font-medium flex items-center justify-center gap-2 text-xs sm:text-sm">
                             <span className="material-symbols-outlined text-emerald-600">verified</span>
                             Contrato assinado digitalmente em {contract.signedAt ? new Date(contract.signedAt).toLocaleDateString('pt-BR') : 'data registrada'}.

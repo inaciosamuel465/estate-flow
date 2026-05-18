@@ -31,6 +31,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         contactPhone: settings.contactPhone || '',
         address: settings.address || '',
         primaryColor: settings.primaryColor || '#4f46e5',
+        contractLegalClauses: settings.contractLegalClauses || '',
         contractTemplates: (() => {
             let parsed;
             if (typeof settings.contractTemplates === 'string') {
@@ -775,6 +776,34 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+
+                                {/* Cláusulas Legais Adicionais */}
+                                <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-3xl border border-amber-200 space-y-4">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-amber-600">gavel</span>
+                                        Cláusulas Legais Adicionais
+                                    </h3>
+                                    <p className="text-sm text-slate-600">
+                                        Informações, leis, decretos ou cláusulas personalizadas que serão anexadas ao final de TODOS os contratos gerados.
+                                        Use este espaço para incluir referências legais, políticas da empresa, bases legais (LGPD), entre outros.
+                                    </p>
+                                    <textarea
+                                        name="contractLegalClauses"
+                                        value={localSettings.contractLegalClauses || ''}
+                                        onChange={(e) => setLocalSettings({...localSettings, contractLegalClauses: e.target.value})}
+                                        rows={12}
+                                        className="w-full p-5 rounded-2xl border border-amber-200 bg-white font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-y"
+                                        placeholder={`Exemplo:
+
+CLÁUSULA ADICIONAL - DA PROTEÇÃO DE DADOS (LGPD)
+
+As partes declaram estar cientes e de acordo com a Lei nº 13.709/2018 (LGPD), comprometendo-se a tratar os dados pessoais compartilhados exclusivamente para as finalidades deste contrato, adotando medidas de segurança técnicas e administrativas para proteção dos dados.
+
+CLÁUSULA ADICIONAL - DO CÓDIGO DE DEFESA DO CONSUMIDOR
+
+Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Código de Defesa do Consumidor (Lei nº 8.078/90) quando aplicável.`}
+                                    />
                                 </div>
                             </section>
                         )}

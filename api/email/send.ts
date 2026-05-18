@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = verifyRequest(req);
   if (!user) return res.status(401).json({ error: 'Nao autorizado' });
 
-  const { to, subject, html, company_id } = req.body;
+  const { to, subject, text, html, company_id, from: customFrom } = req.body;
 
   if (!to || !subject || !html) {
     return res.status(400).json({ error: 'Missing parameters' });
@@ -70,11 +70,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
 
   try {
+    const mailFrom = customFrom
+      ? `"${config.senderName}" <${customFrom}>`
+      : `"${config.senderName}" <${config.senderEmail}>`;
+
     const info = await transporter.sendMail({
-      from: `"${config.senderName}" <${config.senderEmail}>`,
+      from: mailFrom,
       to,
       subject,
+      text: text || undefined,
       html,
+      headers: {
+        'Message-ID': `<${Date.now()}.${Math.random().toString(36).substr(2)}@estateflow>`,
+        'References': '',
+        'In-Reply-To': '',
+      },
     });
 
     res.status(200).json({ success: true, messageId: info.messageId });

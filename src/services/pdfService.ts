@@ -142,43 +142,49 @@ export const generateContractPDF = async (
 
     yPos += 25;
 
+    const colW = (pageWidth - 2 * margin) / 2;
     const col1 = margin;
-    const col2 = pageWidth / 2 + 5;
-    const lineW = (pageWidth / 2) - margin - 5;
-    const stampName = agencyStampName || agencyName || 'ADMINISTRADORA';
+    const col2 = margin + colW;
+    const stampName = agencyStampName || agencyName || 'IMOBILIÁRIA';
 
-    // Rubrica/carimbo da imobiliária no lado esquerdo
-    if (agencyStampUrl) {
+    // Assinatura da Imobiliária (assinatura digital OU carimbo das configurações)
+    if (contract.ownerSignatureImage && contract.ownerSignatureStatus === 'signed') {
         try {
-            doc.addImage(agencyStampUrl, 'PNG', col1 + (lineW/2) - 15, yPos - 15, 30, 12);
+            doc.addImage(contract.ownerSignatureImage, 'PNG', col1 + (colW/2) - 15, yPos - 15, 30, 12);
+        } catch (e) {
+            console.error("Erro ao incluir assinatura da imobiliária no PDF", e);
+        }
+    } else if (agencyStampUrl) {
+        try {
+            doc.addImage(agencyStampUrl, 'PNG', col1 + (colW/2) - 15, yPos - 15, 30, 12);
         } catch (e) {
             console.warn("Erro ao incluir rubrica no PDF", e);
         }
     }
 
-    // Assinatura do cliente no lado direito
+    // Assinatura do contratante
     if (contract.signatureImage && contract.signatureStatus === 'signed') {
         try {
-            doc.addImage(contract.signatureImage, 'PNG', col2 + (lineW/2) - 15, yPos - 15, 30, 12);
+            doc.addImage(contract.signatureImage, 'PNG', col2 + (colW/2) - 15, yPos - 15, 30, 12);
         } catch (e) {
-            console.error("Erro ao incluir imagem de assinatura no PDF", e);
+            console.error("Erro ao incluir imagem de assinatura do contratante no PDF", e);
         }
     }
 
     // Linhas de assinatura
     doc.setLineWidth(0.2);
-    doc.line(col1, yPos, col1 + lineW, yPos);
-    doc.line(col2, yPos, col2 + lineW, yPos);
+    doc.line(col1, yPos, col1 + colW, yPos);
+    doc.line(col2, yPos, col2 + colW, yPos);
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(stampName.toUpperCase(), col1 + lineW/2, yPos + 5, { align: 'center' });
-    doc.text(contract.clientName.toUpperCase(), col2 + lineW/2, yPos + 5, { align: 'center' });
+    doc.text(stampName.toUpperCase(), col1 + colW/2, yPos + 5, { align: 'center' });
+    doc.text(contract.clientName.toUpperCase(), col2 + colW/2, yPos + 5, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
-    doc.text('Administradora (Assinatura Digital)', col1 + lineW/2, yPos + 9, { align: 'center' });
-    doc.text('Contratante', col2 + lineW/2, yPos + 9, { align: 'center' });
+    doc.text('Imobiliária', col1 + colW/2, yPos + 9, { align: 'center' });
+    doc.text('Contratante', col2 + colW/2, yPos + 9, { align: 'center' });
 
     const totalPages = doc.internal.pages.length - 1;
     for (let i = 1; i <= totalPages; i++) {
@@ -193,7 +199,18 @@ export const generateContractPDF = async (
         }
     }
 
-    const fileName = `Contrato_${contract.type === 'rent' ? 'Locacao' : 'Venda'}_${contract.propertyTitle.replace(/\s+/g, '_')}.pdf`;
-    doc.save(fileName);
     return doc;
 };
+
+export function downloadPdfBlob(doc: jsPDF, fileName: string) {
+    const pdfBlob = doc.output('blob');
+    const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file] }).catch(() => {});
+    } else {
+        const url = URL.createObjectURL(pdfBlob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+}

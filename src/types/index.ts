@@ -167,6 +167,9 @@ export interface Contract {
     customContent?: string;
     signatureImage?: string;
     signedAt?: string;
+    ownerSignatureStatus?: 'pending' | 'signed';
+    ownerSignatureImage?: string;
+    ownerSignedAt?: string;
     company_id?: string;
 }
 

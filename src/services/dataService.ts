@@ -85,13 +85,8 @@ export const addContract = async (contract: Contract): Promise<Contract> => {
 };
 
 export const updateContract = async (id: string, data: Partial<Contract>): Promise<boolean> => {
-    try {
-        await neon.updateContract(id, data);
-        return true;
-    } catch (error) {
-        console.error("Erro ao atualizar contrato:", error);
-        return false;
-    }
+    await neon.updateContract(id, data);
+    return true;
 };
 
 export const deleteContract = async (id: string): Promise<boolean> => {

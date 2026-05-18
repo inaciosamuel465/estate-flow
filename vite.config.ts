@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => {
                 const chunks: Buffer[] = [];
                 for await (const chunk of req) chunks.push(chunk as Buffer);
                 const body = JSON.parse(Buffer.concat(chunks).toString());
-                const { to, subject, html, company_id } = body;
+                const { to, subject, text, html, company_id, from: customFrom } = body;
                 if (!to) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Destinatário obrigatório' })); return; }
 
                 let smtpConfig: any = null;
@@ -107,9 +107,17 @@ export default defineConfig(({ mode }) => {
                     auth: { user: config.user, pass: config.pass },
                     tls: { rejectUnauthorized: false },
                   });
+                  const mailFrom = customFrom
+                    ? `"${config.senderName}" <${customFrom}>`
+                    : `"${config.senderName}" <${config.senderEmail}>`;
                   const info = await transporter.sendMail({
-                    from: `"${config.senderName}" <${config.senderEmail}>`,
-                    to, subject, html,
+                    from: mailFrom,
+                    to, subject, text: text || undefined, html,
+                    headers: {
+                      'Message-ID': `<${Date.now()}.${Math.random().toString(36).substr(2)}@estateflow>`,
+                      'References': '',
+                      'In-Reply-To': '',
+                    },
                   });
                   res.end(JSON.stringify({ success: true, messageId: info.messageId }));
                 } catch (err: any) {
@@ -363,8 +371,9 @@ export default defineConfig(({ mode }) => {
                   for await (const chunk of req) chunks.push(chunk as Buffer);
                   const body = JSON.parse(Buffer.concat(chunks).toString());
                   await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS billing_admin_id TEXT`;
-                  const [company, billingAdmin, firstAdmin] = await Promise.all([
-                    sql`SELECT id, name, email, slug FROM companies WHERE id = ${body.company_id} LIMIT 1`,
+                  const [company, saas, billingAdmin, firstAdmin] = await Promise.all([
+                    sql`SELECT id, name, email, slug, subscription_status, plan FROM companies WHERE id = ${body.company_id} LIMIT 1`,
+                    sql`SELECT plan_name, plan_price, billing_email_from FROM saas_settings WHERE id = 'global' LIMIT 1`,
                     sql`
                       SELECT u.name, u.email
                       FROM company_settings cs
@@ -375,9 +384,53 @@ export default defineConfig(({ mode }) => {
                     sql`SELECT name, email FROM users WHERE company_id = ${body.company_id} AND role = 'admin' ORDER BY name LIMIT 1`,
                   ]);
                   if (company.length === 0) { res.statusCode = 404; res.end(JSON.stringify({ error: 'Company not found' })); return; }
-                  const recipient = billingAdmin[0]?.email || firstAdmin[0]?.email || company[0].email;
-                  console.log(`[SIMULATED BILLING EMAIL] To: ${recipient}, Company: ${company[0].name}, URL: /${company[0].slug || ''}/plans`);
-                  res.end(JSON.stringify({ success: true, message: `Email de cobranca enviado para ${recipient}` }));
+                  const c = company[0];
+                  const s = saas[0] || { plan_name: 'Mensal', plan_price: 170, billing_email_from: '' };
+                  const admin = billingAdmin[0] || firstAdmin[0] || null;
+                  const planPrice = Number(s.plan_price) || 170;
+                  const appUrl = env.VITE_APP_URL || '';
+                  const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
+                  const recipient = admin?.email || c.email;
+                  const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
+                  const text = `Olá ${admin?.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
+                  const html = `
+                    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                      <div style="background:#1e293b;padding:32px;border-radius:16px 16px 0 0;text-align:center;">
+                        <h1 style="color:#fff;margin:0;font-size:24px;">EstateFlow</h1>
+                      </div>
+                      <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-radius:0 0 16px 16px;">
+                        <h2 style="color:#1e293b;">Olá, ${admin?.name || c.name}!</h2>
+                        <p style="color:#64748b;">Segue o resumo da sua assinatura:</p>
+                        <div style="background:#f8fafc;border-radius:12px;padding:24px;margin:24px 0;">
+                          <p style="margin:0;color:#94a3b8;font-size:14px;">Plano</p>
+                          <p style="margin:4px 0 16px;font-size:20px;font-weight:bold;color:#1e293b;">${s.plan_name || 'Mensal'}</p>
+                          <p style="margin:0;color:#94a3b8;font-size:14px;">Valor</p>
+                          <p style="margin:4px 0 16px;font-size:24px;font-weight:bold;color:#0f172a;">R$ ${planPrice.toFixed(2)}</p>
+                          <p style="margin:0;color:#94a3b8;font-size:14px;">Status</p>
+                          <p style="margin:4px 0 0;font-size:16px;font-weight:bold;color:${c.subscription_status === 'active' ? '#10b981' : '#f59e0b'}">${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}</p>
+                        </div>
+                        <p style="color:#64748b;font-size:14px;">Para gerenciar sua assinatura, acesse o sistema:</p>
+                        <div style="text-align:center;margin:24px 0;">
+                          <a href="${plansUrl}" style="background:#4f46e5;color:#fff;padding:12px 32px;border-radius:12px;text-decoration:none;font-weight:bold;display:inline-block;">Gerenciar Assinatura</a>
+                        </div>
+                        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
+                        <p style="color:#94a3b8;font-size:12px;">EstateFlow Suite &mdash; Gestão Imobiliária</p>
+                      </div>
+                    </div>
+                  `;
+                  // Actually send via the email API (same as production)
+                  const baseUrl = `http://localhost:${port || 5173}`;
+                  const sendRes = await fetch(`${baseUrl}/api/email/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': auth },
+                    body: JSON.stringify({ to: recipient, subject, text, html, from: s.billing_email_from || '', company_id: body.company_id }),
+                  });
+                  const sendData = await sendRes.json();
+                  if (sendData.success) {
+                    res.end(JSON.stringify({ success: true, message: `Email de cobranca enviado para ${recipient}` }));
+                  } else {
+                    res.statusCode = 500; res.end(JSON.stringify({ error: `Falha ao enviar: ${sendData.error || 'erro desconhecido'}` }));
+                  }
                 } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }
