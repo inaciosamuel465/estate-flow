@@ -78,7 +78,10 @@ export default defineConfig(({ mode }) => {
                   const chunks: Buffer[] = [];
                   for await (const chunk of req) chunks.push(chunk as Buffer);
                   const body = JSON.parse(Buffer.concat(chunks).toString());
-                  const { title, body: pushBody, url, userId } = body;
+                  const { title, body: pushBody, url, userId, companyId } = body;
+                  if (!companyId) {
+                    res.statusCode = 400; res.end(JSON.stringify({ error: 'companyId obrigatorio' })); return;
+                  }
                   const vapidPublic = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
                   const vapidPrivate = env.VAPID_PRIVATE_KEY;
                   if (!vapidPublic || !vapidPrivate) {
@@ -88,9 +91,9 @@ export default defineConfig(({ mode }) => {
                   webpush.default.setVapidDetails('mailto:contato@estateflow.com.br', vapidPublic, vapidPrivate);
                   let subscriptions;
                   if (userId && !isBroadcast) {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId}`;
+                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId} AND company_id = ${companyId}`;
                   } else {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions`;
+                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE company_id = ${companyId}`;
                   }
                   const payload = JSON.stringify({ title, body: pushBody, url });
                   const sendPromises = subscriptions.map(async (sub: any) => {
@@ -113,7 +116,8 @@ export default defineConfig(({ mode }) => {
 
               if (req.url === '/api/admin/provision') {
                 // Simulação de provisionamento
-                res.end(JSON.stringify({ success: true, message: 'Simulado com sucesso' }));
+                res.statusCode = 501;
+                res.end(JSON.stringify({ error: 'Provisionamento de teste desativado no dev server para evitar falso sucesso.' }));
                 return;
               }
 
@@ -161,9 +165,10 @@ export default defineConfig(({ mode }) => {
                     auth: { user: config.user, pass: config.pass },
                     tls: { rejectUnauthorized: false },
                   });
-                  const mailFrom = customFrom
-                    ? `"${config.senderName}" <${customFrom}>`
-                    : `"${config.senderName}" <${config.senderEmail}>`;
+                  const safeFrom = typeof customFrom === 'string' && customFrom.toLowerCase() === String(config.senderEmail).toLowerCase()
+                    ? customFrom
+                    : config.senderEmail;
+                  const mailFrom = `"${config.senderName}" <${safeFrom}>`;
                   const info = await transporter.sendMail({
                     from: mailFrom,
                     to, subject, text: text || undefined, html,

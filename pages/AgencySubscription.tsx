@@ -88,7 +88,7 @@ const AgencySubscription: React.FC<AgencySubscriptionProps> = ({ companyId, comp
         <div className="text-center py-8">
           <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">credit_off</span>
           <p className="text-sm text-slate-500">Nenhuma assinatura ativa</p>
-          <a href="/subscription" className="mt-3 inline-block px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
+          <a href="/plans" className="mt-3 inline-block px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
             Assinar Agora
           </a>
         </div>

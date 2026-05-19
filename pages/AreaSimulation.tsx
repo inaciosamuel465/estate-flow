@@ -55,9 +55,9 @@ const AreaSimulation: React.FC = () => {
          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
             <div>
                  <div className="flex flex-wrap gap-2 items-center mb-2 text-sm">
-                    <a className="text-slate-500 dark:text-[#9da6b9] hover:text-primary font-medium transition-colors" href="#">Dashboard</a>
+                    <span className="text-slate-500 dark:text-[#9da6b9] font-medium">Dashboard</span>
                     <span className="material-symbols-outlined text-slate-400 text-[16px]">chevron_right</span>
-                    <a className="text-slate-500 dark:text-[#9da6b9] hover:text-primary font-medium transition-colors" href="#">Visualizador</a>
+                    <span className="text-slate-500 dark:text-[#9da6b9] font-medium">Visualizador</span>
                     <span className="material-symbols-outlined text-slate-400 text-[16px]">chevron_right</span>
                     <span className="text-slate-900 dark:text-white font-medium">Simulação de Área Local</span>
                 </div>

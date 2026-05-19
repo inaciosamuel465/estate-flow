@@ -26,6 +26,8 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
     const logoUrl = settings.logoUrl || '';
     const agencyStampUrl = settings.agencyStampUrl || '';
     const agencyStampName = settings.agencyStampName || agencyName;
+    const tenantSlug = window.location.pathname.split('/').filter(Boolean)[0];
+    const homeHref = tenantSlug && tenantSlug !== 'contrato' ? `/${tenantSlug}` : '/';
 
     useEffect(() => {
         const load = async () => {
@@ -147,7 +149,7 @@ const PublicContractSign: React.FC<PublicContractSignProps> = ({ contractId, set
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 mb-2">Contrato não encontrado</h1>
                     <p className="text-slate-500 mb-6">{error || 'O link que você acessou é inválido ou o contrato foi removido.'}</p>
-                    <a href="/" className="inline-block px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 transition-colors">Ir para o Site</a>
+                    <a href={homeHref} className="inline-block px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary/90 transition-colors">Ir para o Site</a>
                 </div>
             </div>
         );

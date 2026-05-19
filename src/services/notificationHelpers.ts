@@ -11,6 +11,8 @@ export const createContractNotification = async (
     propertyTitle: string,
     type: 'created' | 'expiring' | 'signed'
 ) => {
+    const tenantSlug = localStorage.getItem('estateflow_last_slug');
+    const tenantPath = tenantSlug ? `/${tenantSlug}` : '';
     const configs = {
         created: {
             title: 'Novo Contrato Criado',
@@ -39,7 +41,7 @@ export const createContractNotification = async (
         message: cfg.message,
         icon: cfg.icon,
         priority: cfg.priority,
-        actionUrl: `/contracts/${contractId}`,
+        actionUrl: `${tenantPath}/contrato/${contractId}`,
     });
 
     // Send Email if it's a new contract or signed
@@ -55,7 +57,7 @@ export const createContractNotification = async (
             body: JSON.stringify({
                 to: userEmail, 
                 subject: cfg.title,
-                html: `<p>${cfg.message}</p><a href="${window.location.origin}/contracts/${contractId}">Ver Contrato</a>`
+                html: `<p>${cfg.message}</p><a href="${window.location.origin}${tenantPath}/contrato/${contractId}">Ver Contrato</a>`
             })
         });
         */

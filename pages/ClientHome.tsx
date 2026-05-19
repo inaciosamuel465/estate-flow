@@ -37,6 +37,11 @@ const ClientHome: React.FC<ClientHomeProps> = ({
     settings = {},
     onBackToSaaS
 }) => {
+    const contactEmail = settings.smtpEmail || settings.email || '';
+    const contactPhone = settings.whatsappNumber || settings.whatsapp || '';
+    const websiteUrl = settings.website || '';
+    const whatsappDigits = contactPhone.replace(/\D/g, '');
+    const contactHref = whatsappDigits ? `https://wa.me/${whatsappDigits}` : (contactEmail ? `mailto:${contactEmail}` : undefined);
     // --- Estados de Filtro ---
     const [selectedCategory, setSelectedCategory] = useState('Todos');
     const [searchText, setSearchText] = useState('');
@@ -271,7 +276,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
             <main className="flex-1">
 
                 {/* --- HERO SECTION LUXO --- */}
-                <section id="hero-section" className="relative h-[85vh] min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900">
+                <section id="hero-section" className="relative min-h-[560px] md:h-[85vh] md:min-h-[600px] flex items-center justify-center overflow-hidden bg-slate-900">
                     <div className="absolute inset-0 overflow-hidden">
                         <div className={`absolute ${heroVideo.type === 'drive' ? 'top-[-90px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+180px)]' : 'top-[-50px] left-[-50px] w-[calc(100%+100px)] h-[calc(100%+100px)]'} opacity-80`}>
                             {heroVideo.type === 'youtube' ? (
@@ -602,7 +607,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                             >
                                 Explorar Oportunidades
                             </button>
-                            <button className="px-10 py-4 bg-transparent border border-white/10 hover:bg-white/5 rounded-xl font-bold text-lg transition-all text-white backdrop-blur-sm">
+                            <button onClick={() => contactHref ? window.open(contactHref, '_blank', 'noopener,noreferrer') : onLoginClick()} className="px-10 py-4 bg-transparent border border-white/10 hover:bg-white/5 rounded-xl font-bold text-lg transition-all text-white backdrop-blur-sm">
                                 Consultoria Personalizada
                             </button>
                         </div>
@@ -627,13 +632,13 @@ const ClientHome: React.FC<ClientHomeProps> = ({
                     </div>
 
                     <div className="flex gap-4">
-                        <a href="#" className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
+                        <a href={contactEmail ? `mailto:${contactEmail}` : undefined} aria-disabled={!contactEmail} className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
                             <span className="material-symbols-outlined notranslate text-[20px]">mail</span>
                         </a>
-                        <a href="#" className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
+                        <a href={whatsappDigits ? `https://wa.me/${whatsappDigits}` : undefined} aria-disabled={!whatsappDigits} className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
                             <span className="material-symbols-outlined notranslate text-[20px]">call</span>
                         </a>
-                        <a href="#" className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
+                        <a href={websiteUrl || undefined} aria-disabled={!websiteUrl} target={websiteUrl ? '_blank' : undefined} rel="noreferrer" className="size-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-300">
                             <span className="material-symbols-outlined notranslate text-[20px]">public</span>
                         </a>
                     </div>

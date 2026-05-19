@@ -206,6 +206,7 @@ export const addNotification = async (notification: any): Promise<void> => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 userId: notification.userId,
+                companyId: localStorage.getItem('estateflow_company_id'),
                 title: notification.title,
                 body: notification.message,
                 url: notification.actionUrl || '/'

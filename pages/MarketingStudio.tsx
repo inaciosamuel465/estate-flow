@@ -225,9 +225,15 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
         setIsSaving(true);
         
         let finalImageUrl = displayImage;
-        // Optionally upload canvas to storage here if needed, for now just use base image
         
         try {
+            if (artboardRef.current) {
+                finalImageUrl = await toPng(artboardRef.current, {
+                    quality: 0.95,
+                    pixelRatio: 2,
+                    cacheBust: true,
+                });
+            }
             await saveMarketingCampaign({
                 userId: String(currentUser.id),
                 propertyId: String(selectedProperty.id),

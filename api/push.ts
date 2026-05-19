@@ -50,14 +50,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = verifyRequest(req);
     if (!user) return res.status(401).json({ error: 'Nao autorizado' });
 
-    const { title, body, url, userId } = req.body;
+    const { title, body, url, userId, companyId } = req.body;
+    const scopedCompanyId = companyId || user.company_id;
+    if (!scopedCompanyId && user.role !== 'master' && user.role !== 'superadmin') {
+      return res.status(400).json({ error: 'companyId obrigatorio' });
+    }
 
     try {
       let result;
       if (userId) {
-        result = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId}`;
+        result = scopedCompanyId
+          ? await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId} AND company_id = ${scopedCompanyId}`
+          : await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId}`;
       } else {
-        result = await sql`SELECT * FROM push_subscriptions`;
+        result = scopedCompanyId
+          ? await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`
+          : await sql`SELECT * FROM push_subscriptions`;
       }
 
       const subscriptions = result;
@@ -89,10 +97,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = verifyRequest(req);
     if (!user) return res.status(401).json({ error: 'Nao autorizado' });
 
-    const { title, body, url } = req.body;
+    const { title, body, url, companyId } = req.body;
+    const scopedCompanyId = companyId || user.company_id;
+    if (!scopedCompanyId && user.role !== 'master' && user.role !== 'superadmin') {
+      return res.status(400).json({ error: 'companyId obrigatorio' });
+    }
 
     try {
-      const subscriptions = await sql`SELECT * FROM push_subscriptions`;
+      const subscriptions = scopedCompanyId
+        ? await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`
+        : await sql`SELECT * FROM push_subscriptions`;
       const payload = JSON.stringify({ title, body, url });
 
       const sendPromises = subscriptions.map(async (sub: any) => {

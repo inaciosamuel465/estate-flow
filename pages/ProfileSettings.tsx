@@ -17,6 +17,9 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
         avatar: user.avatar || ''
     });
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingPassword, setIsSavingPassword] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ password: '', confirm: '' });
+    const [passwordMessage, setPasswordMessage] = useState('');
     const [success, setSuccess] = useState(false);
     const [pwaRedirect, setPwaRedirect] = useState(() => localStorage.getItem('estateflow_pwa_redirect') === 'true');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +56,51 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
             console.error(error);
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handlePasswordSubmit = async () => {
+        setPasswordMessage('');
+        if (passwordForm.password.length < 6) {
+            setPasswordMessage('Use uma senha com pelo menos 6 caracteres.');
+            return;
+        }
+        if (passwordForm.password !== passwordForm.confirm) {
+            setPasswordMessage('As senhas nÃ£o conferem.');
+            return;
+        }
+        setIsSavingPassword(true);
+        try {
+            await onSave({ password: passwordForm.password } as Partial<User>);
+            setPasswordForm({ password: '', confirm: '' });
+            setPasswordMessage('Senha alterada com sucesso.');
+        } catch {
+            setPasswordMessage('NÃ£o foi possÃ­vel alterar a senha.');
+        } finally {
+            setIsSavingPassword(false);
+        }
+    };
+
+    const handlePasswordPrompt = async () => {
+        const nextPassword = window.prompt('Digite a nova senha (mÃ­nimo 6 caracteres):');
+        if (nextPassword === null) return;
+        if (nextPassword.length < 6) {
+            setPasswordMessage('Use uma senha com pelo menos 6 caracteres.');
+            return;
+        }
+        const confirmation = window.prompt('Confirme a nova senha:');
+        if (confirmation !== nextPassword) {
+            setPasswordMessage('As senhas nÃ£o conferem.');
+            return;
+        }
+        setIsSavingPassword(true);
+        try {
+            await onSave({ password: nextPassword } as Partial<User>);
+            setPasswordMessage('Senha alterada com sucesso.');
+        } catch {
+            setPasswordMessage('NÃ£o foi possÃ­vel alterar a senha.');
+        } finally {
+            setIsSavingPassword(false);
         }
     };
 
@@ -235,10 +283,11 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
                             <p className="text-slate-500 text-sm">Altere sua senha ou encerre sua sessão em todos os dispositivos.</p>
                         </div>
                     </div>
-                    <button className="px-6 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-bold text-sm hover:bg-rose-600 hover:text-white transition-all active:scale-95 relative z-10">
-                        Alterar Senha
+                    <button onClick={handlePasswordPrompt} disabled={isSavingPassword} className="px-6 py-2.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-bold text-sm hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-60 relative z-10">
+                        {isSavingPassword ? 'Salvando...' : 'Alterar Senha'}
                     </button>
                 </div>
+                {passwordMessage && <p className="mt-3 text-sm font-semibold text-slate-500">{passwordMessage}</p>}
 
                 {/* PWA Redirect Preference */}
                 <div className="mt-8 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">

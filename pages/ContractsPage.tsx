@@ -1487,7 +1487,7 @@ Este é um email automático. Por favor não responda.`;
                             {/* Document Preview (A4 Simulado) */}
                             <div ref={previewContainerRef} className="flex-1 rounded-2xl p-4 lg:p-8 overflow-x-auto overflow-y-auto flex justify-start lg:justify-center bg-slate-200/50 dark:bg-black/20 custom-scrollbar relative">
                                 
-                                <div id="printable-area" className="flex flex-col gap-0 items-center" style={{ transform: `scale(${a4Scale})`, transformOrigin: 'top center', minWidth: a4Scale < 1 ? '210mm' : undefined }}>
+                                <div id="printable-area" className="flex flex-col gap-0 items-center" style={{ transform: `scale(${a4Scale})`, transformOrigin: 'top left', width: a4Scale < 1 ? `${210 * 3.7795 * a4Scale}px` : '210mm' }}>
                                     {isEditingText ? (
                                         <div className="bg-white text-black w-[210mm] min-h-[297mm] shadow-2xl relative mx-auto flex flex-col p-[25mm]">
                                             <textarea

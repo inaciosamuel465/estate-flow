@@ -11,6 +11,8 @@ interface UserDashboardProps {
     onLogout: () => void;
     onEditProfile?: () => void;
     onUpdateContract?: (id: number | string, data: Partial<Contract>) => void;
+    onToggleFavorite?: (id: number | string) => Promise<void> | void;
+    onAdvertiseClick?: () => void;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -21,7 +23,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     onPropertySelect,
     onLogout,
     onEditProfile,
-    onUpdateContract
+    onUpdateContract,
+    onToggleFavorite,
+    onAdvertiseClick
 }) => {
     const [activeTab, setActiveTab] = useState<'profile' | 'favorites' | 'listings' | 'juridico'>('profile');
     const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
@@ -30,11 +34,11 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
     const [signingContract, setSigningContract] = useState<Contract | null>(null);
 
     // Filtrar imóveis do proprietário (se for owner)
-    const myListings = properties.filter(p => p.ownerId === user.id);
+    const myListings = properties.filter(p => String(p.ownerId) === String(user.id));
 
     const myFavorites = properties.filter(p => Array.isArray(user.favorites) && user.favorites.includes(String(p.id)));
 
-    const myContracts = contracts.filter(c => c.clientId === user.id || c.ownerId === user.id);
+    const myContracts = contracts.filter(c => String(c.clientId) === String(user.id) || String(c.ownerId) === String(user.id));
 
     const handleSignContract = (contract: Contract) => {
         setSigningContract(contract);
@@ -194,7 +198,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                 <p className="text-primary font-bold">{property.price}</p>
                                                 <div className="mt-4 flex gap-2">
                                                     <button onClick={() => onPropertySelect(property.id)} className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-bold rounded-lg transition-colors">Ver Detalhes</button>
-                                                    <button className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Remover"><span className="material-symbols-outlined">delete</span></button>
+                                                    {onToggleFavorite && (
+                                                        <button onClick={() => onToggleFavorite(property.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Remover dos favoritos"><span className="material-symbols-outlined">delete</span></button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -207,7 +213,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                             <div className="space-y-6">
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-xl font-bold text-slate-900">Meus Anúncios ({myListings.length})</h3>
-                                    <button className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-2">
+                                    <button onClick={onAdvertiseClick} disabled={!onAdvertiseClick} className="px-4 py-2 bg-primary disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold hover:bg-primary/90 flex items-center gap-2">
                                         <span className="material-symbols-outlined">add</span> Novo Anúncio
                                     </button>
                                 </div>
@@ -251,8 +257,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
                                                     <div className="mt-6 flex gap-3 pt-4 border-t border-slate-100">
                                                         <button onClick={() => onPropertySelect(property.id)} className="text-sm font-bold text-primary hover:underline">Ver Anúncio</button>
-                                                        <button className="text-sm font-bold text-slate-500 hover:text-slate-800">Editar</button>
-                                                        <button className="text-sm font-bold text-rose-500 hover:text-rose-700 ml-auto">Pausar</button>
+                                                        <span className="ml-auto text-xs font-bold text-slate-400">AlteraÃ§Ãµes pelo admin</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -341,9 +346,9 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                 </div>
                                                                 <div className="flex items-center justify-end">
                                                                     {contract.nextPaymentStatus !== 'paid' && (
-                                                                        <button className="text-[10px] md:text-xs font-bold text-primary flex items-center gap-1 hover:underline">
+                                                                        <span className="text-[10px] md:text-xs font-bold text-amber-600 flex items-center gap-1">
                                                                             <span className="material-symbols-outlined text-[14px] md:text-[16px]">receipt_long</span> Fatura
-                                                                        </button>
+                                                                        </span>
                                                                     )}
                                                                 </div>
                                                             </div>
@@ -358,12 +363,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                         Assinar Agora
                                                                     </button>
                                                                 ) : (
-                                                                    <button className="flex-1 md:flex-none px-6 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                                                                    <button disabled title="A cÃ³pia em PDF serÃ¡ liberada pela imobiliÃ¡ria." className="flex-1 md:flex-none px-6 py-2.5 border border-slate-200 text-slate-400 rounded-xl font-bold text-sm bg-slate-50 cursor-not-allowed transition-all flex items-center justify-center gap-2">
                                                                         <span className="material-symbols-outlined">download</span> Baixar Cópia
                                                                     </button>
                                                                 )}
                                                                 {contract.nextPaymentStatus !== 'paid' && (
-                                                                    <button className="md:ml-auto flex-1 md:flex-none px-6 py-2.5 bg-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center justify-center gap-2">
+                                                                    <button disabled title="Envio de comprovante ainda nÃ£o estÃ¡ configurado para este tenant." className="md:ml-auto flex-1 md:flex-none px-6 py-2.5 bg-slate-200 text-slate-500 rounded-xl font-bold text-sm cursor-not-allowed transition-all flex items-center justify-center gap-2">
                                                                         <span className="material-symbols-outlined">upload_file</span> Enviar Comprovante
                                                                     </button>
                                                                 )}

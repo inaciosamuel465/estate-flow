@@ -819,9 +819,9 @@ const PropertyDetails: React.FC<PropertyDetailsProps> = ({ propertyId, propertie
                             <span className="font-bold text-lg">EstateFlow</span>
                         </div>
                         <div className="flex gap-6 text-sm text-slate-500">
-                            <a className="hover:text-primary" href="#">Privacidade</a>
-                            <a className="hover:text-primary" href="#">Termos</a>
-                            <a className="hover:text-primary" href="#">Ajuda</a>
+                            <span className="text-slate-400">Privacidade</span>
+                            <span className="text-slate-400">Termos</span>
+                            <span className="text-slate-400">Ajuda</span>
                         </div>
                         <p className="text-sm text-slate-400">© 2024 EstateFlow Inc.</p>
                     </div>

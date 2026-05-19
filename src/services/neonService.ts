@@ -12,15 +12,22 @@ function getCompanyId(): string | null {
     }
 }
 
+function requireCompanyId(operation = 'operaÃ§Ã£o'): string {
+    const companyId = getCompanyId();
+    if (!companyId) {
+        throw new Error(`Tenant/company_id ausente para ${operation}.`);
+    }
+    return companyId;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PROPERTIES
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getProperties(): Promise<Property[]> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`SELECT * FROM properties WHERE company_id = ${companyId} ORDER BY created_at DESC`
-        : await sql`SELECT * FROM properties ORDER BY created_at DESC`;
+    if (!companyId) return [];
+    const result = await sql`SELECT * FROM properties WHERE company_id = ${companyId} ORDER BY created_at DESC`;
     return result.map(row => ({
         ...row,
         addressDetails: row.address_details,
@@ -38,7 +45,7 @@ export async function getProperties(): Promise<Property[]> {
 
 export async function addProperty(property: Property): Promise<string> {
     const id = property.id ? String(property.id) : Math.random().toString(36).substr(2, 9);
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('criar imÃ³vel');
     await sql`
         INSERT INTO properties (
             id, title, location, area, price, type, purpose, owner_id, status, 
@@ -74,27 +81,40 @@ export async function addProperty(property: Property): Promise<string> {
 
 export async function updateProperty(id: string, updates: Partial<Property>): Promise<void> {
     try {
-        if (updates.title !== undefined) await sql`UPDATE properties SET title = ${updates.title} WHERE id = ${id}`;
-        if (updates.status !== undefined) await sql`UPDATE properties SET status = ${updates.status} WHERE id = ${id}`;
-        if (updates.price !== undefined) await sql`UPDATE properties SET price = ${updates.price} WHERE id = ${id}`;
-        if (updates.description !== undefined) await sql`UPDATE properties SET description = ${updates.description} WHERE id = ${id}`;
-        if (updates.tag !== undefined) await sql`UPDATE properties SET tag = ${updates.tag} WHERE id = ${id}`;
-        if (updates.location !== undefined) await sql`UPDATE properties SET location = ${updates.location} WHERE id = ${id}`;
-        if (updates.area !== undefined) await sql`UPDATE properties SET area = ${updates.area} WHERE id = ${id}`;
-        if (updates.beds !== undefined) await sql`UPDATE properties SET beds = ${updates.beds} WHERE id = ${id}`;
-        if (updates.baths !== undefined) await sql`UPDATE properties SET baths = ${updates.baths} WHERE id = ${id}`;
-        if (updates.amenities !== undefined) await sql`UPDATE properties SET amenities = ${updates.amenities} WHERE id = ${id}`;
+        const companyId = requireCompanyId('atualizar imÃ³vel');
+        const sets: string[] = [];
+        const params: any[] = [];
+        let paramIdx = 1;
+        const addParam = (val: any) => {
+            params.push(val);
+            return `$${paramIdx++}`;
+        };
+
+        if (updates.title !== undefined) sets.push(`title = ${addParam(updates.title)}`);
+        if (updates.status !== undefined) sets.push(`status = ${addParam(updates.status)}`);
+        if (updates.price !== undefined) sets.push(`price = ${addParam(updates.price)}`);
+        if (updates.description !== undefined) sets.push(`description = ${addParam(updates.description)}`);
+        if (updates.tag !== undefined) sets.push(`tag = ${addParam(updates.tag)}`);
+        if (updates.location !== undefined) sets.push(`location = ${addParam(updates.location)}`);
+        if (updates.area !== undefined) sets.push(`area = ${addParam(updates.area)}`);
+        if (updates.beds !== undefined) sets.push(`beds = ${addParam(updates.beds)}`);
+        if (updates.baths !== undefined) sets.push(`baths = ${addParam(updates.baths)}`);
+        if (updates.amenities !== undefined) sets.push(`amenities = ${addParam(updates.amenities)}`);
         if (updates.images !== undefined) {
-            await sql`UPDATE properties SET images = ${updates.images} WHERE id = ${id}`;
+            sets.push(`images = ${addParam(updates.images)}`);
             if (updates.image === undefined) {
-                await sql`UPDATE properties SET image = ${updates.images[0] || null} WHERE id = ${id}`;
+                sets.push(`image = ${addParam(updates.images[0] || null)}`);
             }
         }
-        if (updates.image !== undefined) await sql`UPDATE properties SET image = ${updates.image} WHERE id = ${id}`;
-        if (updates.addressDetails !== undefined) await sql`UPDATE properties SET address_details = ${updates.addressDetails} WHERE id = ${id}`;
-        if (updates.ownerId !== undefined) await sql`UPDATE properties SET owner_id = ${updates.ownerId.toString()} WHERE id = ${id}`;
-        if (updates.lat !== undefined) await sql`UPDATE properties SET lat = ${updates.lat} WHERE id = ${id}`;
-        if (updates.lng !== undefined) await sql`UPDATE properties SET lng = ${updates.lng} WHERE id = ${id}`;
+        if (updates.image !== undefined) sets.push(`image = ${addParam(updates.image)}`);
+        if (updates.addressDetails !== undefined) sets.push(`address_details = ${addParam(updates.addressDetails)}`);
+        if (updates.ownerId !== undefined) sets.push(`owner_id = ${addParam(updates.ownerId.toString())}`);
+        if (updates.lat !== undefined) sets.push(`lat = ${addParam(updates.lat)}`);
+        if (updates.lng !== undefined) sets.push(`lng = ${addParam(updates.lng)}`);
+        if (sets.length === 0) return;
+
+        params.push(id, companyId);
+        await sql.query(`UPDATE properties SET ${sets.join(', ')} WHERE id = $${paramIdx} AND company_id = $${paramIdx + 1}`, params);
     } catch (error) {
         console.error('Error in updateProperty:', error);
         throw error;
@@ -102,9 +122,10 @@ export async function updateProperty(id: string, updates: Partial<Property>): Pr
 }
 
 export async function deleteProperty(id: string): Promise<void> {
-    await sql`DELETE FROM property_views WHERE property_id = ${id}`;
-    await sql`DELETE FROM leads WHERE property_id = ${id}`;
-    await sql`DELETE FROM properties WHERE id = ${id}`;
+    const companyId = requireCompanyId('excluir imÃ³vel');
+    await sql`DELETE FROM property_views WHERE property_id = ${id} AND company_id = ${companyId}`;
+    await sql`DELETE FROM leads WHERE property_id = ${id} AND company_id = ${companyId}`;
+    await sql`DELETE FROM properties WHERE id = ${id} AND company_id = ${companyId}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,7 +133,7 @@ export async function deleteProperty(id: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function trackPropertyView(propertyId: string, userId?: string, source = 'web'): Promise<void> {
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('registrar visualizaÃ§Ã£o');
     await sql`
         INSERT INTO property_views (property_id, user_id, source, company_id)
         VALUES (${propertyId}, ${userId || null}, ${source}, ${companyId})
@@ -122,7 +143,8 @@ export async function trackPropertyView(propertyId: string, userId?: string, sou
 }
 
 export async function getPropertyViewsCount(propertyId: string): Promise<number> {
-    const result = await sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId}`;
+    const companyId = requireCompanyId('contar visualizaÃ§Ãµes');
+    const result = await sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId}`;
     return Number(result[0]?.count || 0);
 }
 
@@ -132,11 +154,12 @@ export async function getPropertyAnalytics(propertyId: string): Promise<{
     viewsToday: number;
     totalLeads: number;
 }> {
+    const companyId = requireCompanyId('consultar analytics do imÃ³vel');
     const [total, weekly, today, leads] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId}`,
-        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND viewed_at >= NOW() - INTERVAL '7 days'`,
-        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND viewed_at >= NOW() - INTERVAL '1 day'`,
-        sql`SELECT COUNT(*) as count FROM leads WHERE property_id = ${propertyId}`,
+        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId}`,
+        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId} AND viewed_at >= NOW() - INTERVAL '7 days'`,
+        sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId} AND viewed_at >= NOW() - INTERVAL '1 day'`,
+        sql`SELECT COUNT(*) as count FROM leads WHERE property_id = ${propertyId} AND company_id = ${companyId}`,
     ]);
     return {
         totalViews: Number(total[0]?.count || 0),
@@ -152,26 +175,23 @@ export async function getPropertyAnalytics(propertyId: string): Promise<{
 
 export async function getUsers(): Promise<User[]> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`SELECT * FROM users WHERE company_id = ${companyId} ORDER BY name ASC`
-        : await sql`SELECT * FROM users ORDER BY name ASC`;
+    if (!companyId) return [];
+    const result = await sql`SELECT * FROM users WHERE company_id = ${companyId} ORDER BY name ASC`;
     return result.map(row => ({ ...row, createdAt: row.created_at })) as unknown as User[];
 }
 
 export async function getUserById(id: string): Promise<User | null> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`SELECT * FROM users WHERE id = ${id} AND company_id = ${companyId}`
-        : await sql`SELECT * FROM users WHERE id = ${id}`;
+    if (!companyId) return null;
+    const result = await sql`SELECT * FROM users WHERE id = ${id} AND company_id = ${companyId}`;
     if (result.length === 0) return null;
     return { ...result[0], createdAt: result[0].created_at } as unknown as User;
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`SELECT * FROM users WHERE email = ${email} AND company_id = ${companyId}`
-        : await sql`SELECT * FROM users WHERE email = ${email}`;
+    if (!companyId) return null;
+    const result = await sql`SELECT * FROM users WHERE email = ${email} AND company_id = ${companyId}`;
     if (result.length === 0) return null;
     return { ...result[0], createdAt: result[0].created_at } as unknown as User;
 }
@@ -183,7 +203,7 @@ async function ensureTenantUserSchema(): Promise<void> {
 }
 
 export async function upsertUser(user: User): Promise<void> {
-    const companyId = (user as any).company_id || getCompanyId() || 'default';
+    const companyId = (user as any).company_id || requireCompanyId('salvar usuÃ¡rio');
     await ensureTenantUserSchema();
     await sql`
         INSERT INTO users (id, name, email, phone, role, document, address, favorites, password, avatar, company_id)
@@ -205,8 +225,8 @@ export async function upsertUser(user: User): Promise<void> {
 }
 
 export async function deleteUser(id: string): Promise<void> {
-    const cid = getCompanyId();
-    await sql`DELETE FROM users WHERE id = ${id}${cid ? sql` AND company_id = ${cid}` : sql``}`;
+    const cid = requireCompanyId('excluir usuÃ¡rio');
+    await sql`DELETE FROM users WHERE id = ${id} AND company_id = ${cid}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -224,8 +244,8 @@ async function ensureContractSchema(): Promise<void> {
 export async function getContracts(): Promise<Contract[]> {
     const companyId = getCompanyId();
     await ensureContractSchema();
-    const result = companyId
-        ? await sql`
+    if (!companyId) return [];
+    const result = await sql`
             SELECT c.*, p.title as property_title, p.image as property_image,
                    u_client.name as client_name, u_client.phone as client_phone,
                    u_owner.name as owner_name, u_owner.phone as owner_phone
@@ -234,16 +254,6 @@ export async function getContracts(): Promise<Contract[]> {
             LEFT JOIN users u_client ON c.client_id = u_client.id
             LEFT JOIN users u_owner ON c.owner_id = u_owner.id
             WHERE c.company_id = ${companyId}
-            ORDER BY c.created_at DESC
-          `
-        : await sql`
-            SELECT c.*, p.title as property_title, p.image as property_image,
-                   u_client.name as client_name, u_client.phone as client_phone,
-                   u_owner.name as owner_name, u_owner.phone as owner_phone
-            FROM contracts c
-            LEFT JOIN properties p ON c.property_id = p.id::text
-            LEFT JOIN users u_client ON c.client_id = u_client.id
-            LEFT JOIN users u_owner ON c.owner_id = u_owner.id
             ORDER BY c.created_at DESC
           `;
     return result.map(row => ({
@@ -277,6 +287,7 @@ export async function getContracts(): Promise<Contract[]> {
 
 export async function getContractById(id: string): Promise<Contract | null> {
     await ensureContractSchema();
+    const companyId = requireCompanyId('consultar contrato');
     const result = await sql`
         SELECT c.*, p.title as property_title, p.image as property_image,
                u_client.name as client_name, u_client.phone as client_phone,
@@ -285,7 +296,7 @@ export async function getContractById(id: string): Promise<Contract | null> {
         LEFT JOIN properties p ON c.property_id = p.id::text
         LEFT JOIN users u_client ON c.client_id = u_client.id
         LEFT JOIN users u_owner ON c.owner_id = u_owner.id
-        WHERE c.id = ${id}
+        WHERE c.id = ${id} AND c.company_id = ${companyId}
     `;
     if (result.length === 0) return null;
     const row = result[0];
@@ -320,7 +331,7 @@ export async function getContractById(id: string): Promise<Contract | null> {
 
 export async function addContract(contract: Contract): Promise<string> {
     const id = Math.random().toString(36).substr(2, 12);
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('criar contrato');
     await sql`
         INSERT INTO contracts (
             id, property_id, client_id, owner_id, type, status, value,
@@ -343,7 +354,7 @@ export async function addContract(contract: Contract): Promise<string> {
 
 export async function updateContract(id: string, updates: Partial<Contract>): Promise<void> {
     await ensureContractSchema();
-    const cid = getCompanyId();
+    const cid = requireCompanyId('atualizar contrato');
     const sets: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
@@ -402,16 +413,16 @@ export async function updateContract(id: string, updates: Partial<Contract>): Pr
 
     if (sets.length === 0) return;
 
-    const whereClause = cid ? ` WHERE id = $${paramIdx} AND company_id = $${paramIdx + 1}` : ` WHERE id = $${paramIdx}`;
+    const whereClause = ` WHERE id = $${paramIdx} AND company_id = $${paramIdx + 1}`;
     params.push(id);
-    if (cid) params.push(cid);
+    params.push(cid);
 
     await sql.query(`UPDATE contracts SET ${sets.join(', ')}${whereClause}`, params);
 }
 
 export async function deleteContract(id: string): Promise<void> {
-    const cid = getCompanyId();
-    await sql`DELETE FROM contracts WHERE id = ${id}${cid ? sql` AND company_id = ${cid}` : sql``}`;
+    const cid = requireCompanyId('excluir contrato');
+    await sql`DELETE FROM contracts WHERE id = ${id} AND company_id = ${cid}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -433,7 +444,7 @@ export interface Lead {
 }
 
 export async function addLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<string> {
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('criar lead');
     const result = await sql`
         INSERT INTO leads (property_id, property_title, name, email, phone, message, status, score, source, company_id)
         VALUES (${lead.propertyId}, ${lead.propertyTitle || null}, ${lead.name}, ${lead.email || null}, 
@@ -441,26 +452,18 @@ export async function addLead(lead: Omit<Lead, 'id' | 'createdAt'>): Promise<str
                 ${lead.score || 50}, ${lead.source || 'website'}, ${companyId})
         RETURNING id
     `;
-    const cid = getCompanyId();
-    await sql`UPDATE properties SET leads_count = leads_count + 1 WHERE id = ${lead.propertyId}${cid ? sql` AND company_id = ${cid}` : sql``}`;
+    await sql`UPDATE properties SET leads_count = leads_count + 1 WHERE id = ${lead.propertyId} AND company_id = ${companyId}`;
     return result[0].id;
 }
 
 export async function getLeads(limit = 100): Promise<Lead[]> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`
+    if (!companyId) return [];
+    const result = await sql`
             SELECT l.*, p.title as property_title 
             FROM leads l
             LEFT JOIN properties p ON l.property_id = p.id
             WHERE l.company_id = ${companyId}
-            ORDER BY l.created_at DESC
-            LIMIT ${limit}
-          `
-        : await sql`
-            SELECT l.*, p.title as property_title 
-            FROM leads l
-            LEFT JOIN properties p ON l.property_id = p.id
             ORDER BY l.created_at DESC
             LIMIT ${limit}
           `;
@@ -480,8 +483,8 @@ export async function getLeads(limit = 100): Promise<Lead[]> {
 }
 
 export async function updateLeadStatus(id: string, status: Lead['status']): Promise<void> {
-    const cid = getCompanyId();
-    await sql`UPDATE leads SET status = ${status}, updated_at = NOW() WHERE id = ${id}${cid ? sql` AND company_id = ${cid}` : sql``}`;
+    const cid = requireCompanyId('atualizar lead');
+    await sql`UPDATE leads SET status = ${status}, updated_at = NOW() WHERE id = ${id} AND company_id = ${cid}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -495,7 +498,7 @@ export async function addNotification(notification: Omit<AppNotification, 'id' |
         ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium',
         ADD COLUMN IF NOT EXISTS icon TEXT
     `;
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('criar notificaÃ§Ã£o');
     await sql`
         INSERT INTO notifications (user_id, type, title, message, action_url, icon, priority, company_id)
         VALUES (${notification.userId || null}, ${notification.type}, ${notification.title}, 
@@ -505,8 +508,9 @@ export async function addNotification(notification: Omit<AppNotification, 'id' |
 }
 
 export async function getNotifications(userId: string): Promise<AppNotification[]> {
+    const companyId = requireCompanyId('consultar notificaÃ§Ãµes');
     const result = await sql`
-        SELECT * FROM notifications WHERE user_id = ${userId}
+        SELECT * FROM notifications WHERE user_id = ${userId} AND company_id = ${companyId}
         ORDER BY created_at DESC LIMIT 50
     `;
     return result.map(row => ({
@@ -523,19 +527,23 @@ export async function getNotifications(userId: string): Promise<AppNotification[
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-    await sql`UPDATE notifications SET read = TRUE WHERE id = ${id}`;
+    const companyId = requireCompanyId('marcar notificaÃ§Ã£o');
+    await sql`UPDATE notifications SET read = TRUE WHERE id = ${id} AND company_id = ${companyId}`;
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-    await sql`UPDATE notifications SET read = TRUE WHERE user_id = ${userId}`;
+    const companyId = requireCompanyId('marcar notificaÃ§Ãµes');
+    await sql`UPDATE notifications SET read = TRUE WHERE user_id = ${userId} AND company_id = ${companyId}`;
 }
 
 export async function deleteNotificationById(id: string): Promise<void> {
-    await sql`DELETE FROM notifications WHERE id = ${id}`;
+    const companyId = requireCompanyId('excluir notificaÃ§Ã£o');
+    await sql`DELETE FROM notifications WHERE id = ${id} AND company_id = ${companyId}`;
 }
 
 export async function clearNotifications(userId: string): Promise<void> {
-    await sql`DELETE FROM notifications WHERE user_id = ${userId}`;
+    const companyId = requireCompanyId('limpar notificaÃ§Ãµes');
+    await sql`DELETE FROM notifications WHERE user_id = ${userId} AND company_id = ${companyId}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,7 +559,7 @@ export async function logActivity(
     description?: string
 ): Promise<void> {
     try {
-        const companyId = getCompanyId() || 'default';
+        const companyId = requireCompanyId('registrar atividade');
         await sql`
             INSERT INTO activity_log (user_id, user_name, action, entity_type, entity_id, description, company_id)
             VALUES (${userId || null}, ${userName || 'Sistema'}, ${action}, 
@@ -565,9 +573,8 @@ export async function logActivity(
 
 export async function getActivityLog(limit = 20): Promise<any[]> {
     const companyId = getCompanyId();
-    const result = companyId
-        ? await sql`SELECT * FROM activity_log WHERE company_id = ${companyId} ORDER BY created_at DESC LIMIT ${limit}`
-        : await sql`SELECT * FROM activity_log ORDER BY created_at DESC LIMIT ${limit}`;
+    if (!companyId) return [];
+    const result = await sql`SELECT * FROM activity_log WHERE company_id = ${companyId} ORDER BY created_at DESC LIMIT ${limit}`;
     return result.map(row => ({
         id: row.id,
         userId: row.user_id,
@@ -597,7 +604,7 @@ export async function saveMarketingCampaign(data: {
     headline?: string;
     imageUrl?: string;
 }): Promise<string> {
-    const companyId = getCompanyId() || 'default';
+    const companyId = requireCompanyId('salvar campanha');
     const result = await sql`
         INSERT INTO marketing_campaigns 
             (user_id, property_id, property_title, platform, format, tone, template, generated_text, headline, image_url, company_id)
@@ -611,8 +618,9 @@ export async function saveMarketingCampaign(data: {
 }
 
 export async function getMarketingCampaigns(userId: string): Promise<any[]> {
+    const companyId = requireCompanyId('consultar campanhas');
     const result = await sql`
-        SELECT * FROM marketing_campaigns WHERE user_id = ${userId}
+        SELECT * FROM marketing_campaigns WHERE user_id = ${userId} AND company_id = ${companyId}
         ORDER BY created_at DESC LIMIT 50
     `;
     return result.map(row => ({
@@ -641,26 +649,24 @@ export async function getDashboardStats(): Promise<{
     totalRevenue: number;
 }> {
     const companyId = getCompanyId();
+    if (!companyId) {
+        return {
+            totalViews: 0,
+            viewsThisWeek: 0,
+            totalLeads: 0,
+            leadsThisWeek: 0,
+            activeProperties: 0,
+            totalRevenue: 0,
+        };
+    }
     
     const [views, weeklyViews, leads, weeklyLeads, activeProps, revenue] = await Promise.all([
-        companyId
-            ? sql`SELECT COUNT(*) as count FROM property_views WHERE company_id = ${companyId}`
-            : sql`SELECT COUNT(*) as count FROM property_views`,
-        companyId
-            ? sql`SELECT COUNT(*) as count FROM property_views WHERE viewed_at >= NOW() - INTERVAL '7 days' AND company_id = ${companyId}`
-            : sql`SELECT COUNT(*) as count FROM property_views WHERE viewed_at >= NOW() - INTERVAL '7 days'`,
-        companyId
-            ? sql`SELECT COUNT(*) as count FROM leads WHERE company_id = ${companyId}`
-            : sql`SELECT COUNT(*) as count FROM leads`,
-        companyId
-            ? sql`SELECT COUNT(*) as count FROM leads WHERE created_at >= NOW() - INTERVAL '7 days' AND company_id = ${companyId}`
-            : sql`SELECT COUNT(*) as count FROM leads WHERE created_at >= NOW() - INTERVAL '7 days'`,
-        companyId
-            ? sql`SELECT COUNT(*) as count FROM properties WHERE status = 'active' AND company_id = ${companyId}`
-            : sql`SELECT COUNT(*) as count FROM properties WHERE status = 'active'`,
-        companyId
-            ? sql`SELECT COALESCE(SUM(value), 0) as total FROM contracts WHERE status = 'active' AND company_id = ${companyId}`
-            : sql`SELECT COALESCE(SUM(value), 0) as total FROM contracts WHERE status = 'active'`,
+        sql`SELECT COUNT(*) as count FROM property_views WHERE company_id = ${companyId}`,
+        sql`SELECT COUNT(*) as count FROM property_views WHERE viewed_at >= NOW() - INTERVAL '7 days' AND company_id = ${companyId}`,
+        sql`SELECT COUNT(*) as count FROM leads WHERE company_id = ${companyId}`,
+        sql`SELECT COUNT(*) as count FROM leads WHERE created_at >= NOW() - INTERVAL '7 days' AND company_id = ${companyId}`,
+        sql`SELECT COUNT(*) as count FROM properties WHERE status = 'active' AND company_id = ${companyId}`,
+        sql`SELECT COALESCE(SUM(value), 0) as total FROM contracts WHERE status = 'active' AND company_id = ${companyId}`,
     ]);
     return {
         totalViews: Number(views[0]?.count || 0),
@@ -678,10 +684,22 @@ export async function getDashboardStats(): Promise<{
 
 export async function getSettings(): Promise<Record<string, string>> {
     try {
-        const result = await sql`SELECT * FROM system_settings`;
+        const companyId = getCompanyId();
+        const tenantPrefix = companyId ? `${companyId}:` : null;
+        const result = companyId
+            ? await sql`
+                SELECT * FROM system_settings
+                WHERE key NOT LIKE '%:%' OR key LIKE ${tenantPrefix + '%'}
+                ORDER BY CASE WHEN key LIKE ${tenantPrefix + '%'} THEN 1 ELSE 0 END ASC
+              `
+            : await sql`SELECT * FROM system_settings WHERE key NOT LIKE '%:%'`;
         const settings: Record<string, string> = {};
         result.forEach(row => {
-            settings[row.key] = row.value;
+            const rawKey = String(row.key);
+            const key = tenantPrefix && rawKey.startsWith(tenantPrefix)
+                ? rawKey.slice(tenantPrefix.length)
+                : rawKey;
+            settings[key] = row.value;
         });
         return settings;
     } catch (e) {
@@ -691,9 +709,11 @@ export async function getSettings(): Promise<Record<string, string>> {
 }
 
 export async function updateSetting(key: string, value: string): Promise<void> {
+    const companyId = requireCompanyId('atualizar configuraÃ§Ã£o');
+    const scopedKey = `${companyId}:${key}`;
     await sql`
         INSERT INTO system_settings (key, value, updated_at)
-        VALUES (${key}, ${value}, NOW())
+        VALUES (${scopedKey}, ${value}, NOW())
         ON CONFLICT (key) DO UPDATE SET
             value = EXCLUDED.value,
             updated_at = EXCLUDED.updated_at

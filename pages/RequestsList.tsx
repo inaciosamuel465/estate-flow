@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface AgencyRequest {
-  id: number;
+  id: string;
   company_name: string;
   slug: string;
   cnpj: string;
@@ -17,13 +17,15 @@ interface AgencyRequest {
 const RequestsList: React.FC = () => {
   const [requests, setRequests] = useState<AgencyRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actioning, setActioning] = useState<number | null>(null);
+  const [actioning, setActioning] = useState<string | null>(null);
+  const [lastInviteUrl, setLastInviteUrl] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const user = JSON.parse(localStorage.getItem('ef_user') || '{}');
-      const token = localStorage.getItem('ef_token');
+      const master = JSON.parse(localStorage.getItem('master_session') || '{}');
+      const token = master.token;
       const res = await fetch('/api/agency/list-requests', {
         headers: { Authorization: `Bearer ${token}`, 'X-User-Role': 'master' },
       });
@@ -36,17 +38,31 @@ const RequestsList: React.FC = () => {
 
   useEffect(() => { fetchRequests(); }, []);
 
-  const handleAction = async (id: number, action: 'approved' | 'rejected') => {
+  const handleAction = async (id: string, action: 'approved' | 'rejected') => {
     setActioning(id);
+    setActionError('');
+    setLastInviteUrl('');
     try {
-      const token = localStorage.getItem('ef_token');
-      await fetch('/api/agency/approve', {
+      const master = JSON.parse(localStorage.getItem('master_session') || '{}');
+      const token = master.token;
+      const res = await fetch('/api/agency/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ request_id: id, action }),
       });
-      await fetchRequests();
-    } catch { /* ignore */ }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        setActionError(data.error || 'Nao foi possivel processar esta solicitacao.');
+      } else {
+        if (data.activation_url) {
+          setLastInviteUrl(data.activation_url);
+          navigator.clipboard?.writeText(data.activation_url).catch(() => undefined);
+        }
+        await fetchRequests();
+      }
+    } catch {
+      setActionError('Nao foi possivel processar esta solicitacao.');
+    }
     setActioning(null);
   };
 
@@ -71,6 +87,20 @@ const RequestsList: React.FC = () => {
         </button>
       </div>
 
+      {lastInviteUrl && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <p className="font-black mb-1">Convite de ativacao criado</p>
+          <p className="break-all">{lastInviteUrl}</p>
+          <p className="text-xs mt-2 text-emerald-700">O link foi copiado quando o navegador permitiu. Envie para o admin definir a senha.</p>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">
+          {actionError}
+        </div>
+      )}
+
       {requests.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
           <span className="material-symbols-outlined text-5xl mb-3">inbox</span>
@@ -93,7 +123,7 @@ const RequestsList: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm mb-4">
               <div><span className="text-slate-400">Slug:</span> <span className="font-medium text-slate-700">/{r.slug}</span></div>
               {r.cnpj && <div><span className="text-slate-400">CNPJ:</span> <span className="font-medium text-slate-700">{r.cnpj}</span></div>}
               {r.email && <div><span className="text-slate-400">Email:</span> <span className="font-medium text-slate-700">{r.email}</span></div>}

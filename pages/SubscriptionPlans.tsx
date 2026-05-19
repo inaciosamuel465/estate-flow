@@ -42,10 +42,10 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ companyId, curren
         window.location.href = data.checkout_url;
       } else if (data.sandbox_checkout_url) {
         window.location.href = data.sandbox_checkout_url;
-      } else if (data.sandbox) {
-        setError('Mercado Pago nao configurado. Adicione MERCADO_PAGO_ACCESS_TOKEN no .env.local');
+      } else if (data.status === 'not_configured') {
+        setError(data.message || 'Mercado Pago ainda nao foi configurado para gerar checkout real.');
       } else {
-        setError('Erro ao gerar link de pagamento');
+        setError(data.error || 'Erro ao gerar link de pagamento');
       }
     } catch (err: any) {
       setError(err.message || 'Erro de conexao');

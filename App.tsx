@@ -29,7 +29,8 @@ import { NotificationProvider } from './src/contexts/NotificationContext';
 
 import {
   subscribeToAuthChanges,
-  logoutUser
+  logoutUser,
+  persistUserSession
 } from './src/services/authService';
 import {
   getProperties,
@@ -72,12 +73,12 @@ export { AppErrorBoundary } from './components/AppErrorBoundary';
 
 // Wrapper de Scroll
 const PublicLayout = ({ children }: { children?: React.ReactNode }) => (
-  <div className="h-screen w-full overflow-y-auto bg-slate-50 scroll-smooth">
+  <div className="min-h-screen w-full bg-slate-50 scroll-smooth">
     {children}
   </div>
 );
 
-const ROOT_ONLY_PATHS = ['master', 'payment'];
+const ROOT_ONLY_PATHS = ['master', 'plans', 'payment'];
 const LEGACY_TENANT_PATHS = ['login', 'admin', 'dashboard', 'advertise', 'property', 'Estate', 'contrato', 'properties'];
 
 const getStoredTenantSlug = () => {
@@ -92,7 +93,8 @@ const isSafeTenantReturnPath = (path: string | null) => {
   if (!path || !path.startsWith('/')) return false;
   if (path.startsWith('//')) return false;
   if (path === '/login' || path.startsWith('/login?')) return false;
-  return true;
+  if (path === '/') return true;
+  return /^\/(admin|dashboard|profile|property|properties|advertise|plans|contrato)(\/|$)/.test(path);
 };
 
 const App: React.FC = () => {
@@ -135,7 +137,7 @@ const App: React.FC = () => {
 
     const unsubscribeNotifications = subscribeToNotifications((notifs) => {
       setNotifications(notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
+    }, currentUser?.id ? String(currentUser.id) : undefined);
 
     if (isCompanyLoading) {
       return () => {
@@ -146,7 +148,7 @@ const App: React.FC = () => {
 
     const first = window.location.pathname.split('/').filter(Boolean)[0] || null;
     const isRootOnlyRoute = !first || ROOT_ONLY_PATHS.includes(first);
-    if (!company?.id && isRootOnlyRoute) {
+    if (isRootOnlyRoute) {
       setProperties([]);
       setContracts([]);
       setUsers([]);
@@ -197,7 +199,7 @@ const App: React.FC = () => {
       unsubscribeAuth();
       unsubscribeNotifications();
     };
-  }, [company?.id, isCompanyLoading]);
+  }, [company?.id, currentUser?.id, isCompanyLoading]);
 
   // --- Dynamic Branding Injection (Company-aware) ---
   useEffect(() => {
@@ -580,7 +582,13 @@ const App: React.FC = () => {
     if (!currentUser) return;
     const success = await updateUser(String(currentUser.id), updatedData);
     if (success) {
-      setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        const { password: _password, ...safeUpdatedData } = updatedData as any;
+        const merged = { ...prev, ...safeUpdatedData };
+        persistUserSession(merged);
+        return merged;
+      });
     }
   };
 
@@ -655,8 +663,14 @@ const App: React.FC = () => {
     }
 
     const newFavorites = await toggleFavorite(String(currentUser.id), id);
+    if (!newFavorites) return;
     // Atualiza estado local para feedback imediato
-    setCurrentUser(prev => prev ? { ...prev, favorites: newFavorites } : null);
+    setCurrentUser(prev => {
+      if (!prev) return null;
+      const merged = { ...prev, favorites: newFavorites };
+      persistUserSession(merged);
+      return merged;
+    });
     // alert(`Ação de favoritos salva para ${currentUser.name}!`); // Alert opcional, visual é melhor
   };
 
@@ -1110,6 +1124,8 @@ const App: React.FC = () => {
             onLogout={handleLogout}
             onEditProfile={() => setCurrentView('client-profile-settings')}
             onUpdateContract={handleUpdateContract}
+            onToggleFavorite={handleFavoriteAction}
+            onAdvertiseClick={() => setCurrentView('advertise')}
           />
         </PublicLayout>
       </NotificationProvider>
@@ -1216,10 +1232,6 @@ const App: React.FC = () => {
           onBackToSaaS={() => navigate('/')}
         />
         <WhatsAppButton phoneNumber="5515997241175" />
-        {/* Teste de Sincronização */}
-        <div className="fixed bottom-4 left-4 z-[100] bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg opacity-80 pointer-events-none">
-          v1.0.1 - SYNC ACTIVE
-        </div>
       </PublicLayout>
     </NotificationProvider>
   );

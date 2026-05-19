@@ -13,6 +13,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!to || !subject || !html) {
     return res.status(400).json({ error: 'Missing parameters' });
   }
+  if (company_id && user.company_id && company_id !== user.company_id && !['master', 'superadmin'].includes(user.role)) {
+    return res.status(403).json({ error: 'Tenant invalido' });
+  }
 
   // SMTP config: try company settings first, fallback to ENV
   let smtpConfig: {
@@ -70,9 +73,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   });
 
   try {
-    const mailFrom = customFrom
-      ? `"${config.senderName}" <${customFrom}>`
-      : `"${config.senderName}" <${config.senderEmail}>`;
+    const safeFrom = typeof customFrom === 'string' && customFrom.toLowerCase() === config.senderEmail.toLowerCase()
+      ? customFrom
+      : config.senderEmail;
+    const mailFrom = `"${config.senderName}" <${safeFrom}>`;
 
     const info = await transporter.sendMail({
       from: mailFrom,

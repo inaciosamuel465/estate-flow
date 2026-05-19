@@ -150,8 +150,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         try {
             const res = await fetch('/api/push/broadcast', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(broadcastMessage)
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('ef_token') || ''}` },
+                body: JSON.stringify({ ...broadcastMessage, companyId: localStorage.getItem('estateflow_company_id') })
             });
             if (res.ok) {
                 alert('Anúncio enviado com sucesso para todos os inscritos!');
@@ -171,7 +171,11 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         try {
             // We use a dedicated API or we can try to do it via dataService if allowed
             // But since this is a server-side thing, let's use an API endpoint
-            const res = await fetch('/api/admin/provision', { method: 'POST' });
+            const res = await fetch('/api/admin/provision', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('ef_token') || ''}` },
+                body: JSON.stringify({ company_id: localStorage.getItem('estateflow_company_id') })
+            });
             if (res.ok) alert('Dados de teste provisionados com sucesso!');
             else alert('Erro ao provisionar dados.');
         } catch (e) {

@@ -32,6 +32,15 @@ function getSlugFromPath(): string | null {
   }
 }
 
+function isRootOnlyPath(): boolean {
+  try {
+    const first = window.location.pathname.split('/').filter(Boolean)[0];
+    return !first || first === 'master' || first === 'plans' || first.startsWith('payment');
+  } catch {
+    return true;
+  }
+}
+
 interface CompanyContextType {
   company: Company | null;
   companySettings: CompanySettings | null;
@@ -188,6 +197,13 @@ export const CompanyProvider: React.FC<Props> = ({ children }) => {
       }
 
       // Fallback: localStorage apenas se chegou aqui sem slug
+      if (isRootOnlyPath()) {
+        setCompany(null);
+        setCompanySettings(null);
+        setIsLoading(false);
+        return;
+      }
+
       const storedId = localStorage.getItem(COMPANY_ID_KEY);
       const storedData = localStorage.getItem(COMPANY_DATA_KEY);
       const storedSettings = localStorage.getItem(COMPANY_SETTINGS_KEY);

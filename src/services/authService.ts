@@ -14,6 +14,10 @@ function setStoredCompanyId(id: string) {
     localStorage.setItem('estateflow_company_id', id);
 }
 function clearStoredCompanyId() { localStorage.removeItem('companyId'); }
+function clearAllStoredCompanyIds() {
+    localStorage.removeItem('companyId');
+    localStorage.removeItem('estateflow_company_id');
+}
 
 // Tipos de resposta para facilitar o uso no Front
 export interface AuthResponse {
@@ -29,15 +33,20 @@ const getSessionKey = (companyId = getCurrentCompanyId()) => (
 
 const saveSession = (user: User) => {
     const companyId = user.company_id || getCurrentCompanyId();
-    localStorage.setItem(getSessionKey(companyId), JSON.stringify(user));
-    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    const { password: _password, ...safeUser } = user as any;
+    localStorage.setItem(getSessionKey(companyId), JSON.stringify(safeUser));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
     window.dispatchEvent(new Event("auth-change"));
+};
+
+export const persistUserSession = (user: User) => {
+    saveSession(user);
 };
 
 const clearSession = () => {
     localStorage.removeItem(getSessionKey());
     localStorage.removeItem(SESSION_KEY);
-    clearStoredCompanyId();
+    clearAllStoredCompanyIds();
     window.dispatchEvent(new Event("auth-change"));
 };
 
