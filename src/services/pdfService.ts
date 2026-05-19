@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { Contract, Property, User } from '../types';
+import { Contract, Property, PropertyInspection, PropertyProcess, User } from '../types';
 
 function loadImage(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -214,3 +214,101 @@ export function downloadPdfBlob(doc: jsPDF, fileName: string) {
         setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 }
+
+export const generatePropertyOperationPDF = async (
+    process: PropertyProcess,
+    property: Property,
+    inspection?: PropertyInspection,
+    settings: Record<string, string> = {},
+) => {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 18;
+    const contentWidth = pageWidth - margin * 2;
+    const agencyName = settings.companyName || 'Imobiliaria';
+    let y = 18;
+
+    const ensureSpace = (height = 12) => {
+        if (y + height > pageHeight - 18) {
+            doc.addPage();
+            y = 18;
+        }
+    };
+
+    const line = (text: string, size = 10, style: 'normal' | 'bold' = 'normal') => {
+        doc.setFont('helvetica', style);
+        doc.setFontSize(size);
+        const parts = doc.splitTextToSize(text, contentWidth);
+        parts.forEach((part: string) => {
+            ensureSpace(7);
+            doc.text(part, margin, y);
+            y += 6;
+        });
+    };
+
+    doc.setFillColor(17, 24, 39);
+    doc.rect(0, 0, pageWidth, 32, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('Jornada do Imovel', margin, 14);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${agencyName} - ${new Date().toLocaleDateString('pt-BR')}`, margin, 23);
+    y = 42;
+    doc.setTextColor(15, 23, 42);
+
+    line(property.title, 15, 'bold');
+    line(`${property.location || ''} | ${property.type || ''} | ${property.beds || 0} quarto(s) | ${property.baths || 0} banheiro(s)`, 9);
+    line(`Fluxo: ${process.flowType} | Status: ${process.status}`, 9, 'bold');
+    if (process.notes) line(`Observacoes da jornada: ${process.notes}`, 9);
+    y += 4;
+
+    line('Etapas da jornada', 12, 'bold');
+    process.steps.forEach(step => {
+        line(`${step.order}. ${step.title} - ${step.status}${step.completedAt ? ` (${new Date(step.completedAt).toLocaleDateString('pt-BR')})` : ''}`, 9);
+    });
+
+    if (inspection) {
+        y += 4;
+        line('Vistoria guiada', 12, 'bold');
+        if (inspection.notes) line(`Observacoes gerais: ${inspection.notes}`, 9);
+        inspection.rooms.forEach(room => {
+            ensureSpace(20);
+            y += 2;
+            line(`${room.name} - ${room.status}`, 10, 'bold');
+            const checks = Object.entries(room.checklist || {}).map(([key, value]) => `${key}: ${value}`).join(' | ');
+            if (checks) line(checks, 8);
+            if (room.quickNotes?.length) line(`Marcadores: ${room.quickNotes.join(', ')}`, 8);
+            if (room.notes) line(`Obs.: ${room.notes}`, 8);
+            const images = (room.images || []).slice(0, 4);
+            if (images.length) {
+                let x = margin;
+                ensureSpace(34);
+                images.forEach(img => {
+                    try {
+                        doc.addImage(img, 'JPEG', x, y, 34, 26);
+                        x += 38;
+                    } catch {
+                        try {
+                            doc.addImage(img, 'PNG', x, y, 34, 26);
+                            x += 38;
+                        } catch {}
+                    }
+                });
+                y += 30;
+            }
+        });
+    }
+
+    const totalPages = doc.internal.pages.length - 1;
+    for (let i = 1; i <= totalPages; i += 1) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Pagina ${i} de ${totalPages} | Processo ${process.id}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+    }
+
+    return doc;
+};

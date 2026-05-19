@@ -13,18 +13,36 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
     const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState('');
 
     useEffect(() => {
+        const previousOverflow = document.body.style.overflow;
+        const previousTouchAction = document.body.style.touchAction;
+        document.body.style.overflow = 'hidden';
+        document.body.style.touchAction = 'none';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.body.style.touchAction = previousTouchAction;
+        };
+    }, []);
+
+    useEffect(() => {
         if (mode === 'draw' && canvasRef.current) {
             const canvas = canvasRef.current;
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+            canvas.height = Math.max(1, Math.floor(rect.height * dpr));
             const ctx = canvas.getContext('2d');
             if (ctx) {
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.strokeStyle = '#000000';
                 ctx.lineWidth = 2;
                 ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
             }
         }
     }, [mode]);
 
     const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('touches' in e) e.preventDefault();
         setIsDrawing(true);
         setHasContent(true);
         draw(e);
@@ -40,6 +58,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
     };
 
     const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if ('touches' in e) e.preventDefault();
         if (!isDrawing || !canvasRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
@@ -49,6 +68,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
         let clientX, clientY;
 
         if ('touches' in e) {
+            if (!e.touches[0]) return;
             clientX = e.touches[0].clientX;
             clientY = e.touches[0].clientY;
         } else {
@@ -98,14 +118,14 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-[#1a1d23] rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-none">
+            <div className="bg-white dark:bg-[#1a1d23] rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-xl max-h-[calc(100dvh-1.5rem)] overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+                <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-between sm:items-center shrink-0">
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Assinatura Digital</h3>
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">Assinatura Digital</h3>
                         <p className="text-sm text-slate-500">Assine manualmente ou suba uma imagem.</p>
                     </div>
-                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                    <div className="grid grid-cols-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full sm:w-auto">
                         <button 
                             onClick={() => { setMode('draw'); setUploadedPreviewUrl(''); setHasContent(false); }}
                             className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'draw' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary' : 'text-slate-500'}`}
@@ -121,14 +141,13 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
                     </div>
                 </div>
 
-                <div className="p-8 flex flex-col items-center">
+                <div className="p-4 sm:p-8 flex flex-col items-center overflow-y-auto overscroll-contain">
                     {mode === 'draw' ? (
                         <div className="w-full">
                             <canvas
                                 ref={canvasRef}
-                                width={500}
-                                height={200}
-                                className="w-full h-48 bg-slate-50 dark:bg-black/20 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl cursor-crosshair touch-none"
+                                className="w-full h-48 sm:h-56 bg-slate-50 dark:bg-black/20 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl cursor-crosshair touch-none select-none overscroll-contain"
+                                style={{ touchAction: 'none' }}
                                 onMouseDown={startDrawing}
                                 onMouseMove={draw}
                                 onMouseUp={stopDrawing}
@@ -166,7 +185,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel }) => {
                     )}
                 </div>
 
-                <div className="p-6 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-slate-800 flex gap-3">
+                <div className="p-4 sm:p-6 bg-slate-50 dark:bg-black/20 border-t border-slate-100 dark:border-slate-800 flex gap-3 shrink-0">
                     <button onClick={onCancel} className="flex-1 py-3 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-600 dark:text-white hover:bg-white dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                     <button 
                         onClick={handleSave}

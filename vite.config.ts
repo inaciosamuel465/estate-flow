@@ -121,6 +121,103 @@ export default defineConfig(({ mode }) => {
                 return;
               }
 
+              if (req.url === '/api/property-documents/send-email') {
+                const chunks: Buffer[] = [];
+                for await (const chunk of req) chunks.push(chunk as Buffer);
+                const body = JSON.parse(Buffer.concat(chunks).toString());
+                const { company_id, document_id, to_email, subject, message } = body;
+                if (!company_id || !document_id || !to_email) {
+                  res.statusCode = 400;
+                  res.end(JSON.stringify({ success: false, error: 'company_id, document_id e to_email sao obrigatorios' }));
+                  return;
+                }
+
+                try {
+                  const sql = neon(env.VITE_DATABASE_URL);
+                  const docs = await sql`
+                    SELECT * FROM property_process_documents
+                    WHERE id = ${document_id} AND company_id = ${company_id}
+                    LIMIT 1
+                  `;
+                  if (!docs[0]) {
+                    res.statusCode = 404;
+                    res.end(JSON.stringify({ success: false, error: 'Documento nao encontrado para esta imobiliaria' }));
+                    return;
+                  }
+
+                  let smtpConfig: any = null;
+                  const s = await sql`SELECT * FROM company_settings WHERE company_id = ${company_id} LIMIT 1`;
+                  if (s[0]?.smtp_host && s[0]?.smtp_user && s[0]?.smtp_password) {
+                    smtpConfig = {
+                      host: s[0].smtp_host,
+                      port: Number(s[0].smtp_port) || 587,
+                      secure: s[0].smtp_secure === true,
+                      user: s[0].smtp_user,
+                      pass: s[0].smtp_password,
+                      senderName: s[0].email_sender_name || 'EstateFlow',
+                      senderEmail: s[0].email_sender_address || s[0].smtp_user,
+                    };
+                  }
+
+                  const config = smtpConfig || {
+                    host: env.SMTP_HOST,
+                    port: Number(env.SMTP_PORT) || 587,
+                    secure: env.SMTP_SECURE === 'true',
+                    user: env.SMTP_USER,
+                    pass: env.SMTP_PASS,
+                    senderName: 'EstateFlow Suite',
+                    senderEmail: env.SMTP_USER,
+                  };
+
+                  if (!config.host || !config.user) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: 'SMTP nao configurado para envio de documentos' }));
+                    return;
+                  }
+
+                  const document = docs[0];
+                  const fileData = String(document.file_data || '');
+                  const base64 = fileData.includes(',') ? fileData.split(',')[1] : fileData;
+                  const nodemailer = await import('nodemailer');
+                  const transporter = nodemailer.default.createTransport({
+                    host: config.host,
+                    port: config.port,
+                    secure: config.secure,
+                    auth: { user: config.user, pass: config.pass },
+                    tls: { rejectUnauthorized: false },
+                  });
+                  const mailFrom = `"${config.senderName}" <${config.senderEmail}>`;
+                  const info = await transporter.sendMail({
+                    from: mailFrom,
+                    to: to_email,
+                    subject: subject || `${document.title} - EstateFlow`,
+                    text: message || `Segue em anexo o documento ${document.title}.`,
+                    html: `<p>${message || `Segue em anexo o documento ${document.title}.`}</p>`,
+                    attachments: [{
+                      filename: document.file_name || `${document.title}.pdf`,
+                      content: Buffer.from(base64, 'base64'),
+                      contentType: document.mime_type || 'application/pdf',
+                    }],
+                    headers: {
+                      'Message-ID': `<doc-${document.id}-${Date.now()}@estateflow>`,
+                      'References': '',
+                      'In-Reply-To': '',
+                    },
+                  });
+
+                  await sql`
+                    UPDATE property_process_documents
+                    SET sent_at = NOW()
+                    WHERE id = ${document_id} AND company_id = ${company_id}
+                  `;
+                  res.end(JSON.stringify({ success: true, data: { messageId: info.messageId } }));
+                } catch (e: any) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ success: false, error: e.message || 'Erro ao enviar documento' }));
+                }
+                return;
+              }
+
               if (req.url === '/api/email/send') {
                 const chunks: Buffer[] = [];
                 for await (const chunk of req) chunks.push(chunk as Buffer);

@@ -1,4 +1,4 @@
-import { Property, Contract, User, AppNotification as Notification } from "../types";
+import { Property, Contract, User, AppNotification as Notification, PropertyInspection, PropertyProcess, PropertyProcessDocument } from "../types";
 import * as neon from "./neonService";
 import type { Lead } from "./neonService";
 
@@ -97,6 +97,88 @@ export const deleteContract = async (id: string): Promise<boolean> => {
         console.error("Erro ao excluir contrato:", error);
         return false;
     }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROPERTY OPERATIONS / PROCESS JOURNEYS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const apiHeaders = () => ({
+    'Content-Type': 'application/json',
+    ...(localStorage.getItem('ef_token') ? { Authorization: `Bearer ${localStorage.getItem('ef_token')}` } : {}),
+});
+
+const currentCompanyId = () => localStorage.getItem('estateflow_company_id') || '';
+
+async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(url, init);
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) throw new Error(data?.error || `Erro na API (${res.status})`);
+    return data.data as T;
+}
+
+export const getPropertyProcesses = async (): Promise<PropertyProcess[]> => {
+    return await neon.getPropertyProcesses();
+};
+
+export const createPropertyProcess = async (data: Partial<PropertyProcess> & { propertyId: string | number; flowType: string }): Promise<PropertyProcess> => {
+    return await neon.createPropertyProcess(data);
+};
+
+export const updatePropertyProcess = async (id: string, data: Partial<PropertyProcess>): Promise<PropertyProcess> => {
+    return await neon.updatePropertyProcess(id, data);
+};
+
+export const savePropertyInspection = async (inspection: PropertyInspection): Promise<string> => {
+    return await neon.savePropertyInspection(inspection);
+};
+
+export const getPropertyInspections = async (processId?: string, propertyId?: string | number): Promise<PropertyInspection[]> => {
+    return await neon.getPropertyInspections(processId, propertyId);
+};
+
+export const saveInspectionImage = async (input: {
+    inspectionId: string;
+    processId?: string;
+    propertyId: string | number;
+    contractId?: string;
+    room: string;
+    category?: string;
+    imageUrl: string;
+    notes?: string;
+}): Promise<string> => {
+    return await neon.saveInspectionImage(input);
+};
+
+export const savePropertyDocument = async (input: {
+    processId: string;
+    propertyId: string | number;
+    documentType: PropertyProcessDocument['documentType'];
+    title: string;
+    fileName: string;
+    fileData: string;
+    mimeType?: string;
+}): Promise<string> => {
+    return await neon.savePropertyDocument(input);
+};
+
+export const sendPropertyDocumentEmail = async (input: {
+    documentId: string;
+    toEmail: string;
+    subject?: string;
+    message?: string;
+}): Promise<void> => {
+    await apiJson('/api/property-documents/send-email', {
+        method: 'POST',
+        headers: apiHeaders(),
+        body: JSON.stringify({
+            company_id: currentCompanyId(),
+            document_id: input.documentId,
+            to_email: input.toEmail,
+            subject: input.subject,
+            message: input.message,
+        }),
+    });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

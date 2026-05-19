@@ -13,6 +13,7 @@ import AreaSimulation from './pages/AreaSimulation';
 import ListingsManagement from './pages/ListingsManagement';
 import FinancialManagement from './pages/FinancialManagement';
 import MarketingStudio from './pages/MarketingStudio';
+import PropertyOperations from './pages/PropertyOperations';
 import ContractsPage from './pages/ContractsPage';
 import Analytics from './pages/Analytics';
 import AIAnalytics from './pages/AIAnalytics';
@@ -293,7 +294,7 @@ const App: React.FC = () => {
       if (lastSlug) {
         const rest = location.pathname.split('/').filter(Boolean).slice(1).join('/');
         const normalizedFirst = first === 'Estate' ? 'property' : first;
-        navigate(`/${lastSlug}/${normalizedFirst}${rest ? `/${rest}` : ''}`, { replace: true });
+        navigate(`/${lastSlug}/${normalizedFirst}${rest ? `/${rest}` : ''}${location.search || ''}`, { replace: true });
       } else {
         navigate('/', { replace: true });
       }
@@ -347,6 +348,7 @@ const App: React.FC = () => {
       if (p === '/admin/listing/new') return 'listing';
       if (p === '/admin/listing/edit') return 'edit-listing';
       if (p === '/admin/financial') return 'financial';
+      if (p === '/admin/operations') return 'operations';
       if (p === '/admin/contracts') return 'contracts';
       if (p === '/admin/marketing') return 'marketing';
       if (p === '/admin/map') return 'map';
@@ -390,6 +392,7 @@ const App: React.FC = () => {
       'listing': s ? `${pref}/admin/listing/new` : '/',
       'edit-listing': s ? `${pref}/admin/listing/edit` : '/',
       'financial': s ? `${pref}/admin/financial` : '/',
+      'operations': s ? `${pref}/admin/operations` : '/',
       'contracts': s ? `${pref}/admin/contracts` : '/',
       'marketing': s ? `${pref}/admin/marketing` : '/',
       'map': s ? `${pref}/admin/map` : '/',
@@ -825,6 +828,14 @@ const App: React.FC = () => {
             onUpdateContract={handleUpdateContract}
           />
         );
+        case 'operations': return (
+          <PropertyOperations
+            properties={properties}
+            users={users}
+            settings={settings}
+            onNavigate={setCurrentView}
+          />
+        );
         case 'contracts': return (
           <ContractsPage
             contracts={contracts}
@@ -953,6 +964,7 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <MobileAdminNavButton active={currentView === 'dashboard'} onClick={() => { setCurrentView('dashboard'); setIsMobileMenuOpen(false); }} icon="dashboard" label="Home" />
                   <MobileAdminNavButton active={currentView === 'all-listings'} onClick={() => { setCurrentView('all-listings'); setIsMobileMenuOpen(false); }} icon="inventory_2" label="Imóveis" />
+                  <MobileAdminNavButton active={currentView === 'operations'} onClick={() => { setCurrentView('operations'); setIsMobileMenuOpen(false); }} icon="route" label="Operações" />
                   <MobileAdminNavButton active={currentView === 'contracts'} onClick={() => { setCurrentView('contracts'); setIsMobileMenuOpen(false); }} icon="gavel" label="Jurídico" />
                   <MobileAdminNavButton active={currentView === 'marketing'} onClick={() => { setCurrentView('marketing'); setIsMobileMenuOpen(false); }} icon="campaign" label="Marketing" />
                   <MobileAdminNavButton active={currentView === 'ai-analytics'} onClick={() => { setCurrentView('ai-analytics'); setIsMobileMenuOpen(false); }} icon="psychology" label="IA Analytics" />
@@ -1018,6 +1030,7 @@ const App: React.FC = () => {
           <div className="flex flex-col gap-4 w-full px-2">
             <NavButton active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} icon="dashboard" tooltip="Painel Administrativo" />
             <NavButton active={currentView === 'all-listings' || currentView === 'edit-listing'} onClick={() => setCurrentView('all-listings')} icon="inventory_2" tooltip="Meus Anúncios" />
+            <NavButton active={currentView === 'operations'} onClick={() => setCurrentView('operations')} icon="route" tooltip="Operações & Jornada do Imóvel" />
             <NavButton active={currentView === 'contracts'} onClick={() => setCurrentView('contracts')} icon="gavel" tooltip="Canal Jurídico & Contratos" />
             <NavButton active={currentView === 'marketing'} onClick={() => setCurrentView('marketing')} icon="campaign" tooltip="Marketing Studio" />
             <NavButton active={currentView === 'ai-analytics'} onClick={() => setCurrentView('ai-analytics')} icon="psychology" tooltip="IA Analytics & Leads" />

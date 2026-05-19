@@ -162,11 +162,16 @@ export interface Contract {
     installmentsPaid?: number;
     lastPaymentDate?: string;
     nextPaymentStatus: 'pending' | 'paid' | 'overdue';
-    templateType?: 'rent_residential' | 'sale_cash' | 'season';
+    templateType?: 'rent_residential' | 'sale_cash' | 'sale_installments' | 'rent_termination' | 'property_management' | 'key_delivery' | 'inspection_report' | 'season_rent' | 'commercial_rent' | 'season';
     signatureStatus?: 'pending' | 'signed';
     customContent?: string;
     signatureImage?: string;
     signedAt?: string;
+    publicToken?: string;
+    publicTokenExpiresAt?: string;
+    sentAt?: string;
+    viewedAt?: string;
+    version?: number;
     ownerSignatureStatus?: 'pending' | 'signed';
     ownerSignatureImage?: string;
     ownerSignedAt?: string;
@@ -184,4 +189,87 @@ export interface AppNotification {
     icon?: string;
     priority?: 'low' | 'medium' | 'high';
     company_id?: string;
+}
+
+export type PropertyProcessType = 'rent' | 'sale' | 'season';
+export type PropertyProcessStatus = 'draft' | 'in_progress' | 'blocked' | 'completed' | 'canceled';
+export type PropertyProcessStepStatus = 'pending' | 'active' | 'completed' | 'blocked';
+export type InspectionRoomStatus = 'ok' | 'attention' | 'bad' | 'na';
+
+export interface PropertyProcessStep {
+    id: string;
+    title: string;
+    description?: string;
+    status: PropertyProcessStepStatus;
+    order: number;
+    kind?: 'start' | 'client' | 'inspection' | 'contract' | 'keys' | 'active' | 'checkout' | 'done' | 'documents';
+    completedAt?: string;
+}
+
+export interface PropertyProcessEvent {
+    id: string;
+    processId: string;
+    eventType: string;
+    title: string;
+    description?: string;
+    userId?: string;
+    createdAt?: string;
+}
+
+export interface PropertyProcessDocument {
+    id: string;
+    processId: string;
+    propertyId: string;
+    documentType: 'inspection' | 'key_delivery' | 'summary' | 'custom';
+    title: string;
+    fileName?: string;
+    fileData?: string;
+    mimeType?: string;
+    sentAt?: string;
+    createdAt?: string;
+}
+
+export interface InspectionRoom {
+    id: string;
+    name: string;
+    type: string;
+    status: InspectionRoomStatus;
+    checklist: Record<string, InspectionRoomStatus>;
+    quickNotes: string[];
+    notes?: string;
+    images: string[];
+}
+
+export interface PropertyInspection {
+    id: string;
+    processId?: string;
+    propertyId: string;
+    contractId?: string;
+    type: 'initial' | 'final' | 'checkout' | 'key_delivery';
+    status: 'draft' | 'completed';
+    rooms: InspectionRoom[];
+    notes?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface PropertyProcess {
+    id: string;
+    companyId?: string;
+    propertyId: string;
+    propertyTitle: string;
+    propertyImage?: string;
+    flowType: PropertyProcessType;
+    status: PropertyProcessStatus;
+    currentStepId?: string;
+    clientId?: string;
+    clientName?: string;
+    contractId?: string;
+    notes?: string;
+    steps: PropertyProcessStep[];
+    events?: PropertyProcessEvent[];
+    documents?: PropertyProcessDocument[];
+    inspections?: PropertyInspection[];
+    createdAt?: string;
+    updatedAt?: string;
 }
