@@ -9,9 +9,10 @@ interface AdminSettingsProps {
     settings: Record<string, string>;
     onSettingsUpdated: (newSettings: Record<string, string>) => void;
     users: User[];
+    currentUser?: User | null;
 }
 
-const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users }) => {
+const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users, currentUser }) => {
     const { permissionStatus, requestPermission } = useNotifications();
     const { company, companySettings, refreshCompany } = useCompany();
     const [testEmail, setTestEmail] = useState('');
@@ -99,17 +100,19 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 headers: {
                     'Content-Type': 'application/json',
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...(currentUser?.id ? { 'X-EstateFlow-User-Id': String(currentUser.id) } : {}),
                 },
                 body: JSON.stringify({
                     title: 'Teste de Notificação',
                     body: testPushMessage,
                     url: '/',
                     companyId,
+                    company_id: companyId,
                 })
             });
             const data = await res.json().catch(() => null);
             if (res.ok) alert(`Push disparado para ${data.count} dispositivos inscritos.`);
-            else alert(data.error || 'Erro ao disparar push.');
+            else alert(data?.error || `Erro ao disparar push (${res.status}).`);
         } catch (e) {
             alert('Erro de conexão ao disparar push.');
         } finally {
@@ -129,8 +132,16 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         try {
             const res = await fetch('/api/push/broadcast', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('ef_token') || ''}` },
-                body: JSON.stringify({ ...broadcastMessage, companyId: localStorage.getItem('estateflow_company_id') })
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(localStorage.getItem('ef_token') ? { Authorization: `Bearer ${localStorage.getItem('ef_token')}` } : {}),
+                    ...(currentUser?.id ? { 'X-EstateFlow-User-Id': String(currentUser.id) } : {}),
+                },
+                body: JSON.stringify({
+                    ...broadcastMessage,
+                    companyId: localStorage.getItem('estateflow_company_id'),
+                    company_id: localStorage.getItem('estateflow_company_id'),
+                })
             });
             const data = await res.json().catch(() => null);
             if (res.ok) {

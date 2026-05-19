@@ -23,6 +23,7 @@ function clearAllStoredCompanyIds() {
 export interface AuthResponse {
     user: User | null;
     error?: string;
+    token?: string;
 }
 
 // Funções auxiliares para Session Management
@@ -39,6 +40,22 @@ const saveSession = (user: User) => {
     window.dispatchEvent(new Event("auth-change"));
 };
 
+async function refreshApiToken(email: string, password: string, companyId: string): Promise<string | null> {
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, company_id: companyId }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.token) return null;
+        localStorage.setItem('ef_token', data.token);
+        return data.token;
+    } catch {
+        return null;
+    }
+}
+
 export const persistUserSession = (user: User) => {
     saveSession(user);
 };
@@ -46,6 +63,7 @@ export const persistUserSession = (user: User) => {
 const clearSession = () => {
     localStorage.removeItem(getSessionKey());
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('ef_token');
     clearAllStoredCompanyIds();
     window.dispatchEvent(new Event("auth-change"));
 };
@@ -102,8 +120,9 @@ export const registerUser = async (data: RegisterData, companyId = getCurrentCom
 
         await neon.upsertUser(userData);
         saveSession(userData);
+        const token = await refreshApiToken(data.email, data.password, effectiveCompanyId);
         
-        return { user: userData };
+        return { user: userData, token: token || undefined };
 
     } catch (error: any) {
         console.error("Erro ao registrar:", error);
@@ -135,8 +154,9 @@ export const loginUser = async (email: string, pass: string, companyId = getCurr
         setStoredCompanyId(userCompanyId);
         
         saveSession(safeUser);
+        const token = await refreshApiToken(email, pass, userCompanyId);
         
-        return { user: safeUser as User };
+        return { user: safeUser as User, token: token || undefined };
     } catch (error: any) {
         console.error("Erro ao logar:", error);
         return { user: null, error: "Erro ao autenticar no servidor." };

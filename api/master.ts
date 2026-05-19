@@ -9,6 +9,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const route = String(req.query.route || '');
   const dbUrl = process.env.VITE_DATABASE_URL;
 
+  // POST /api/auth/login
+  if ((path === '/api/auth/login' || route === 'auth-login') && req.method === 'POST') {
+    const { email, password, company_id } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email e senha obrigatorios' });
+    if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
+
+    try {
+      const sql = neon(dbUrl);
+      const rows = company_id
+        ? await sql`SELECT * FROM users WHERE lower(email) = lower(${String(email)}) AND company_id = ${String(company_id)} LIMIT 1`
+        : await sql`SELECT * FROM users WHERE lower(email) = lower(${String(email)}) LIMIT 1`;
+      if (rows.length === 0) return res.status(401).json({ error: 'Credenciais invalidas' });
+
+      const user = rows[0];
+      const hashedInput = crypto.createHash('sha256').update(String(password)).digest('hex');
+      if (user.password !== hashedInput) return res.status(401).json({ error: 'Credenciais invalidas' });
+
+      const { password: _, ...safeUser } = user;
+      const token = signToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        company_id: user.company_id,
+        exp: Date.now() + 86400000,
+      });
+      return res.status(200).json({ success: true, user: safeUser, token });
+    } catch (error) {
+      console.error('Auth login error:', error);
+      return res.status(500).json({ error: 'Erro interno do servidor' });
+    }
+  }
+
   // POST /api/email/send routed here to keep Hobby deployments under the function limit.
   if ((path === '/api/email/send' || route === 'email-send') && req.method === 'POST') {
     const user = verifyRequest(req);

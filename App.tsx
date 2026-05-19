@@ -906,6 +906,7 @@ const App: React.FC = () => {
             settings={settings}
             onSettingsUpdated={setSettings}
             users={users}
+            currentUser={currentUser}
           />
         );
         case 'users': return (

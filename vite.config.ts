@@ -34,6 +34,58 @@ export default defineConfig(({ mode }) => {
       {
         name: 'api-simulator',
         configureServer(server) {
+          const readJsonBody = async (req: any) => {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) chunks.push(chunk as Buffer);
+            return JSON.parse(Buffer.concat(chunks).toString() || '{}');
+          };
+
+          const ensurePushSchema = async (sql: ReturnType<typeof neon>) => {
+            await sql`
+              CREATE TABLE IF NOT EXISTS push_subscriptions (
+                endpoint TEXT PRIMARY KEY,
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL,
+                user_id TEXT,
+                company_id TEXT NOT NULL DEFAULT 'default',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+              )
+            `;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default'`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
+            await sql`CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions (endpoint)`;
+          };
+
+          const parseDevToken = (auth: string | string[] | undefined) => {
+            try {
+              const raw = String(Array.isArray(auth) ? auth[0] : auth || '').replace('Bearer ', '');
+              if (!raw) return null;
+              const payload = raw.split('.').length === 3 ? raw.split('.')[1] : raw;
+              return JSON.parse(Buffer.from(payload, 'base64url').toString());
+            } catch {
+              return null;
+            }
+          };
+
+          const resolvePushUser = async (req: any, sql: ReturnType<typeof neon>, companyId: string) => {
+            const tokenPayload = parseDevToken(req.headers.authorization);
+            if (tokenPayload?.exp && tokenPayload.exp >= Date.now()) return tokenPayload;
+
+            const userId = String(req.headers['x-estateflow-user-id'] || '');
+            if (!userId || !companyId) return null;
+            const rows = await sql`
+              SELECT id, email, role, company_id
+              FROM users
+              WHERE id = ${userId} AND company_id = ${companyId}
+              LIMIT 1
+            `;
+            const user = rows[0];
+            if (!user || !['admin', 'master', 'superadmin'].includes(String(user.role))) return null;
+            return user;
+          };
+
           server.middlewares.use(async (req, res, next) => {
             if (req.url?.startsWith('/api/')) {
               // Simulação de Vercel Functions para desenvolvimento local
@@ -48,9 +100,8 @@ export default defineConfig(({ mode }) => {
               if (req.url === '/api/push/subscribe') {
                 try {
                   const sql = neon(env.VITE_DATABASE_URL);
-                  const chunks: Buffer[] = [];
-                  for await (const chunk of req) chunks.push(chunk as Buffer);
-                  const body = JSON.parse(Buffer.concat(chunks).toString());
+                  await ensurePushSchema(sql);
+                  const body = await readJsonBody(req);
                   const { subscription, userId, companyId } = body;
                   if (!subscription || !subscription.endpoint) {
                     res.statusCode = 400; res.end(JSON.stringify({ error: 'Subscription missing' })); return;
@@ -59,7 +110,11 @@ export default defineConfig(({ mode }) => {
                     INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id, company_id)
                     VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${userId || null}, ${companyId || 'default'})
                     ON CONFLICT (endpoint) DO UPDATE SET
-                      user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+                      user_id = EXCLUDED.user_id,
+                      company_id = EXCLUDED.company_id,
+                      p256dh = EXCLUDED.p256dh,
+                      auth = EXCLUDED.auth,
+                      updated_at = NOW()
                   `;
                   res.end(JSON.stringify({ success: true }));
                 } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
@@ -69,18 +124,17 @@ export default defineConfig(({ mode }) => {
               if (req.url === '/api/push/send' || req.url === '/api/push/broadcast') {
                 try {
                   const isBroadcast = req.url === '/api/push/broadcast';
-                  const auth = req.headers.authorization || '';
-                  if (!isBroadcast) {
-                    const tokenPayload = auth ? JSON.parse(atob(auth.replace('Bearer ', ''))) : null;
-                    if (!tokenPayload || tokenPayload.exp < Date.now()) { res.statusCode = 401; res.end(JSON.stringify({ error: 'Nao autorizado' })); return; }
-                  }
                   const sql = neon(env.VITE_DATABASE_URL);
-                  const chunks: Buffer[] = [];
-                  for await (const chunk of req) chunks.push(chunk as Buffer);
-                  const body = JSON.parse(Buffer.concat(chunks).toString());
-                  const { title, body: pushBody, url, userId, companyId } = body;
-                  if (!companyId) {
+                  await ensurePushSchema(sql);
+                  const body = await readJsonBody(req);
+                  const { title, body: pushBody, url, userId, companyId, company_id } = body;
+                  const scopedCompanyId = String(companyId || company_id || '');
+                  if (!scopedCompanyId) {
                     res.statusCode = 400; res.end(JSON.stringify({ error: 'companyId obrigatorio' })); return;
+                  }
+                  const user = await resolvePushUser(req, sql, scopedCompanyId);
+                  if (!user) {
+                    res.statusCode = 401; res.end(JSON.stringify({ error: 'Sessao invalida. Entre novamente e tente disparar o push.' })); return;
                   }
                   const vapidPublic = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
                   const vapidPrivate = env.VAPID_PRIVATE_KEY;
@@ -91,9 +145,9 @@ export default defineConfig(({ mode }) => {
                   webpush.default.setVapidDetails('mailto:contato@estateflow.com.br', vapidPublic, vapidPrivate);
                   let subscriptions;
                   if (userId && !isBroadcast) {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId} AND company_id = ${companyId}`;
+                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId} AND company_id = ${scopedCompanyId}`;
                   } else {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE company_id = ${companyId}`;
+                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`;
                   }
                   const payload = JSON.stringify({ title, body: pushBody, url });
                   const sendPromises = subscriptions.map(async (sub: any) => {
@@ -355,10 +409,38 @@ export default defineConfig(({ mode }) => {
                 return;
               }
 
+              if (req.url === '/api/auth/login') {
+                const body = await readJsonBody(req);
+                const { email, password, company_id } = body;
+                try {
+                  const sql = neon(env.VITE_DATABASE_URL);
+                  const result = company_id
+                    ? await sql`SELECT * FROM users WHERE lower(email) = lower(${email}) AND company_id = ${company_id} LIMIT 1`
+                    : await sql`SELECT * FROM users WHERE lower(email) = lower(${email}) LIMIT 1`;
+                  if (result.length === 0) {
+                    res.statusCode = 401; res.end(JSON.stringify({ error: 'Credenciais invalidas' })); return;
+                  }
+                  const user = result[0];
+                  const msgUint8 = new TextEncoder().encode(password);
+                  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+                  const hashArray = Array.from(new Uint8Array(hashBuffer));
+                  const hashedInput = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                  if (user.password !== hashedInput) {
+                    res.statusCode = 401; res.end(JSON.stringify({ error: 'Credenciais invalidas' })); return;
+                  }
+                  const { password: _, ...safeUser } = user;
+                  const payload = { id: user.id, email: user.email, role: user.role, company_id: user.company_id, exp: Date.now() + 86400000 };
+                  res.end(JSON.stringify({
+                    success: true,
+                    user: safeUser,
+                    token: Buffer.from(JSON.stringify(payload)).toString('base64url')
+                  }));
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+                return;
+              }
+
               if (req.url === '/api/master/login') {
-                const chunks: Buffer[] = [];
-                for await (const chunk of req) chunks.push(chunk as Buffer);
-                const body = JSON.parse(Buffer.concat(chunks).toString());
+                const body = await readJsonBody(req);
                 const { email, password } = body;
                 try {
                   const sql = neon(env.VITE_DATABASE_URL);

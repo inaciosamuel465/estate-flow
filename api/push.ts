@@ -3,6 +3,51 @@ import { neon } from '@neondatabase/serverless';
 import webpush from 'web-push';
 import { verifyRequest } from './_lib/auth';
 
+type PushUser = { id: string; email: string; role: string; company_id?: string };
+
+async function ensurePushSchema(sql: ReturnType<typeof neon>) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_id TEXT,
+      company_id TEXT NOT NULL DEFAULT 'default',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT`;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default'`;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions (endpoint)`;
+}
+
+async function resolvePushUser(req: VercelRequest, sql: ReturnType<typeof neon>, companyId?: string): Promise<PushUser | null> {
+  const tokenUser = verifyRequest(req);
+  if (tokenUser) return tokenUser;
+
+  const headerUserId = req.headers['x-estateflow-user-id'];
+  const userId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId;
+  if (!userId || !companyId) return null;
+
+  const rows = await sql`
+    SELECT id, email, role, company_id
+    FROM users
+    WHERE id = ${String(userId)} AND company_id = ${companyId}
+    LIMIT 1
+  `;
+  const user = rows[0];
+  if (!user) return null;
+  if (!['admin', 'master', 'superadmin'].includes(String(user.role))) return null;
+  return {
+    id: String(user.id),
+    email: String(user.email || ''),
+    role: String(user.role),
+    company_id: user.company_id ? String(user.company_id) : undefined,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
   const dbUrl = process.env.VITE_DATABASE_URL;
@@ -17,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
   const sql = neon(dbUrl);
+  await ensurePushSchema(sql);
 
   // POST /api/push/subscribe
   if (path === '/api/push/subscribe' && req.method === 'POST') {
@@ -30,7 +76,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id, company_id)
         VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${userId || null}, ${companyId || 'default'})
         ON CONFLICT (endpoint) DO UPDATE SET
-          user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+          user_id = EXCLUDED.user_id,
+          company_id = EXCLUDED.company_id,
+          p256dh = EXCLUDED.p256dh,
+          auth = EXCLUDED.auth,
+          updated_at = NOW()
       `;
       return res.status(200).json({ success: true });
     } catch (error) {
@@ -47,11 +97,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST /api/push/send
   if (path === '/api/push/send' && req.method === 'POST') {
-    const user = verifyRequest(req);
-    if (!user) return res.status(401).json({ error: 'Nao autorizado' });
+    const { title, body, url, userId, companyId, company_id } = req.body;
+    const requestedCompanyId = String(companyId || company_id || '');
+    const user = await resolvePushUser(req, sql, requestedCompanyId);
+    if (!user) return res.status(401).json({ error: 'Sessao invalida. Entre novamente e tente disparar o push.' });
 
-    const { title, body, url, userId, companyId } = req.body;
-    const scopedCompanyId = companyId || user.company_id;
+    const scopedCompanyId = requestedCompanyId || user.company_id;
     if (!scopedCompanyId && user.role !== 'master' && user.role !== 'superadmin') {
       return res.status(400).json({ error: 'companyId obrigatorio' });
     }
@@ -94,11 +145,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST /api/push/broadcast
   if (path === '/api/push/broadcast' && req.method === 'POST') {
-    const user = verifyRequest(req);
-    if (!user) return res.status(401).json({ error: 'Nao autorizado' });
+    const { title, body, url, companyId, company_id } = req.body;
+    const requestedCompanyId = String(companyId || company_id || '');
+    const user = await resolvePushUser(req, sql, requestedCompanyId);
+    if (!user) return res.status(401).json({ error: 'Sessao invalida. Entre novamente e tente enviar o anuncio.' });
 
-    const { title, body, url, companyId } = req.body;
-    const scopedCompanyId = companyId || user.company_id;
+    const scopedCompanyId = requestedCompanyId || user.company_id;
     if (!scopedCompanyId && user.role !== 'master' && user.role !== 'superadmin') {
       return res.status(400).json({ error: 'companyId obrigatorio' });
     }

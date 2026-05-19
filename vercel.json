@@ -2,6 +2,7 @@
     "framework": "vite",
     "rewrites": [
         { "source": "/api/agency/(.*)", "destination": "/api/agency" },
+        { "source": "/api/auth/login", "destination": "/api/master?route=auth-login" },
         { "source": "/api/admin/provision", "destination": "/api/master?route=admin-provision" },
         { "source": "/api/email/send", "destination": "/api/master?route=email-send" },
         { "source": "/api/billing/(.*)", "destination": "/api/billing" },

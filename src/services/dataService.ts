@@ -110,6 +110,17 @@ const apiHeaders = () => ({
 
 const currentCompanyId = () => localStorage.getItem('estateflow_company_id') || '';
 
+const currentSessionUserId = () => {
+    try {
+        const companyId = currentCompanyId();
+        const scopedSession = companyId ? localStorage.getItem(`estateflow_user_session_${companyId}`) : null;
+        const session = scopedSession || localStorage.getItem('estateflow_user_session');
+        return session ? String(JSON.parse(session)?.id || '') : '';
+    } catch {
+        return '';
+    }
+};
+
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
     const res = await fetch(url, init);
     const data = await res.json().catch(() => null);
@@ -285,10 +296,14 @@ export const addNotification = async (notification: any): Promise<void> => {
         // Trigger Push Notification via API
         fetch('/api/push/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                ...apiHeaders(),
+                ...(currentSessionUserId() ? { 'X-EstateFlow-User-Id': currentSessionUserId() } : {}),
+            },
             body: JSON.stringify({
                 userId: notification.userId,
-                companyId: localStorage.getItem('estateflow_company_id'),
+                companyId: currentCompanyId(),
+                company_id: currentCompanyId(),
                 title: notification.title,
                 body: notification.message,
                 url: notification.actionUrl || '/'
