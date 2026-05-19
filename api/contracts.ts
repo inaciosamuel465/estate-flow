@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHash, randomBytes } from 'crypto';
-import * as nodemailer from 'nodemailer';
 import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireRole, requireTenant } from './_lib/http.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
 
 async function ensureContractSchema(sql: ReturnType<typeof getSql>) {
   await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS agency_cnpj TEXT`;
@@ -96,7 +96,7 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function getBaseUrl(req: VercelRequest, explicit?: string) {
+function getBaseUrl(req: VercelRequest, explicit: string) {
   const base = explicit || process.env.VITE_APP_URL || process.env.APP_URL || `https://${req.headers.host || 'localhost'}`;
   return String(base).replace(/\/+$/, '');
 }
@@ -111,7 +111,7 @@ function escapeHtml(value: unknown) {
 }
 
 function safeDomain(email: string) {
-  const domain = email.split('@')[1]?.replace(/[^a-zA-Z0-9.-]/g, '') || 'estateflow.local';
+  const domain = email.split('@')[1].replace(/[^a-zA-Z0-9.-]/g, '') || 'estateflow.local';
   return domain || 'estateflow.local';
 }
 
@@ -343,7 +343,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (user) requireRole(user, ['admin', 'master', 'superadmin']);
 
       const { contract_id, to_email, company_id, tenant_slug, base_url, contract_content } = req.body || {};
-      const companyId = String(company_id || user?.company_id || '');
+      const companyId = String(company_id || user.company_id || '');
       if (!contract_id || !companyId) return fail(res, 400, 'contract_id e company_id sao obrigatorios');
       if (user) assertTenantAccess(user, companyId);
 
@@ -380,16 +380,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const targetEmail = String(to_email || contract.client_email || '').trim();
       if (!targetEmail) return fail(res, 400, 'Cliente nao possui email cadastrado');
 
-      const smtpReady = Boolean(contract.smtp_host && contract.smtp_user && contract.smtp_password);
       const tenantSlug = String(tenant_slug || contract.tenant_slug || '').trim();
       const token = randomBytes(32).toString('base64url');
       const tokenHash = hashToken(token);
-      const signatureUrl = `${getBaseUrl(req, base_url)}/${tenantSlug}/contrato/${String(contract_id)}?token=${encodeURIComponent(token)}`;
+      const signatureUrl = `${getBaseUrl(req, base_url)}/${tenantSlug}/contrato/${String(contract_id)}token=${encodeURIComponent(token)}`;
       const uniqueSuffix = `${String(contract_id).slice(0, 8)}-${Date.now()}`;
       const subject = `Contrato #${uniqueSuffix} - Assinatura - ${contract.property_title || 'Imovel'}`;
       const logId = `elog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const senderEmail = String(contract.email_sender_address || contract.smtp_user || '').trim();
-      const senderName = String(contract.email_sender_name || contract.settings_company_name || contract.company_name || 'EstateFlow').trim();
+      const config = resolveSmtpConfig(contract, String(contract.settings_company_name || contract.company_name || 'EstateFlow'));
 
       await sql`
         UPDATE contracts
@@ -409,23 +407,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ON CONFLICT (id) DO NOTHING
       `;
 
-      if (!smtpReady) {
+      if (!config) {
         await sql`
           INSERT INTO email_logs (id, company_id, user_id, to_email, subject, status, provider, error, entity_type, entity_id, metadata)
-          VALUES (${logId}, ${companyId}, ${user?.id || null}, ${targetEmail}, ${subject}, 'pending_configuration', NULL, 'SMTP da imobiliaria nao configurado', 'contract', ${String(contract_id)}, ${JSON.stringify({ signatureUrl })}::jsonb)
+          VALUES (${logId}, ${companyId}, ${user?.id || null}, ${targetEmail}, ${subject}, 'pending_configuration', NULL, ${publicSmtpError()}, 'contract', ${String(contract_id)}, ${JSON.stringify({ signatureUrl })}::jsonb)
         `;
-        return fail(res, 409, 'Configure o SMTP da imobiliaria antes de enviar contratos por email', { log_id: logId, url: signatureUrl });
+        return fail(res, 409, publicSmtpError(), { log_id: logId, url: signatureUrl });
       }
 
-      const transporter = nodemailer.createTransport({
-        host: contract.smtp_host,
-        port: Number(contract.smtp_port || 587),
-        secure: contract.smtp_secure === true,
-        auth: {
-          user: contract.smtp_user,
-          pass: contract.smtp_password,
-        },
-      });
+      const transporter = createSmtpTransport(config);
+      const senderEmail = config.senderEmail;
+      const senderName = config.senderName;
       const messageId = `<contract-${uniqueSuffix}@${safeDomain(senderEmail)}>`;
       const escapedAgency = escapeHtml(senderName);
       const escapedClient = escapeHtml(contract.client_name || 'Cliente');
@@ -461,10 +453,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await sql`
         INSERT INTO email_logs (id, company_id, user_id, to_email, subject, status, provider, message_id, error, entity_type, entity_id, metadata)
-        VALUES (${logId}, ${companyId}, ${user?.id || null}, ${targetEmail}, ${subject}, 'sent', 'smtp', ${info.messageId || messageId}, NULL, 'contract', ${String(contract_id)}, ${JSON.stringify({ signatureUrl })}::jsonb)
+        VALUES (${logId}, ${companyId}, ${user?.id || null}, ${targetEmail}, ${subject}, 'sent', ${config.source === 'company' ? 'smtp' : 'smtp_env'}, ${info.messageId || messageId}, NULL, 'contract', ${String(contract_id)}, ${JSON.stringify({ signatureUrl })}::jsonb)
       `;
 
-      await auditLog(sql, { companyId, userId: user?.id, action: 'contract_signature_sent', entityType: 'contract', entityId: String(contract_id) });
+      await auditLog(sql, { companyId, userId: user.id, action: 'contract_signature_sent', entityType: 'contract', entityId: String(contract_id) });
       return ok(res, { data: { log_id: logId, status: 'sent', url: signatureUrl } });
     }
 

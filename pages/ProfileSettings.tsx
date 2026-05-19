@@ -66,7 +66,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
             return;
         }
         if (passwordForm.password !== passwordForm.confirm) {
-            setPasswordMessage('As senhas nÃ£o conferem.');
+            setPasswordMessage('As senhas não conferem.');
             return;
         }
         setIsSavingPassword(true);
@@ -75,14 +75,14 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
             setPasswordForm({ password: '', confirm: '' });
             setPasswordMessage('Senha alterada com sucesso.');
         } catch {
-            setPasswordMessage('NÃ£o foi possÃ­vel alterar a senha.');
+            setPasswordMessage('Não foi possível alterar a senha.');
         } finally {
             setIsSavingPassword(false);
         }
     };
 
     const handlePasswordPrompt = async () => {
-        const nextPassword = window.prompt('Digite a nova senha (mÃ­nimo 6 caracteres):');
+        const nextPassword = window.prompt('Digite a nova senha (mínimo 6 caracteres):');
         if (nextPassword === null) return;
         if (nextPassword.length < 6) {
             setPasswordMessage('Use uma senha com pelo menos 6 caracteres.');
@@ -90,7 +90,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
         }
         const confirmation = window.prompt('Confirme a nova senha:');
         if (confirmation !== nextPassword) {
-            setPasswordMessage('As senhas nÃ£o conferem.');
+            setPasswordMessage('As senhas não conferem.');
             return;
         }
         setIsSavingPassword(true);
@@ -98,7 +98,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ user, onSave, onBack 
             await onSave({ password: nextPassword } as Partial<User>);
             setPasswordMessage('Senha alterada com sucesso.');
         } catch {
-            setPasswordMessage('NÃ£o foi possÃ­vel alterar a senha.');
+            setPasswordMessage('Não foi possível alterar a senha.');
         } finally {
             setIsSavingPassword(false);
         }

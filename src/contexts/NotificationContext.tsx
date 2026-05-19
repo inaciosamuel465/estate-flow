@@ -37,7 +37,7 @@ function urlBase64ToUint8Array(base64String: string) {
 
 interface Props {
   children: React.ReactNode;
-  userId?: string | number;
+  userId: string | number;
   existingNotifications: AppNotification[];
   onMarkAsRead: (id: string | number) => Promise<void>;
   onMarkAllAsRead: () => Promise<void>;
@@ -80,18 +80,20 @@ export const NotificationProvider: React.FC<Props> = ({
     try {
       // 1. Get Public Key from Server
       const res = await fetch('/api/push/vapidPublicKey');
-      const { publicKey } = await res.json();
+      const { publicKey, error } = await res.json().catch(() => ({ publicKey: '', error: 'Resposta invalida do servidor' }));
+      if (!res.ok) throw new Error(error || 'VAPID public key ausente no servidor.');
       if (!publicKey) throw new Error('VAPID public key ausente no servidor.');
 
       // 2. Subscribe no Browser
-      const subscription = await reg.pushManager.subscribe({
+      const existingSubscription = await reg.pushManager.getSubscription();
+      const subscription = existingSubscription || await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
       // 3. Salva no Banco de Dados via API
       const companyId = localStorage.getItem('estateflow_company_id');
-      await fetch('/api/push/subscribe', {
+      const saveRes = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,16 +102,25 @@ export const NotificationProvider: React.FC<Props> = ({
           companyId: companyId || 'default'
         })
       });
+      const saveData = await saveRes.json().catch(() => null);
+      if (!saveRes.ok) throw new Error(saveData.error || 'Falha ao salvar inscricao de push.');
       console.log('[Native Push] Dispositivo inscrito com sucesso.');
     } catch (e) {
       console.error('[Native Push] Erro ao subscrever para push:', e);
+      alert(e instanceof Error ? e.message : 'Erro ao ativar notificacoes push.');
     }
   }, [userId]);
 
   // Solicita permissão e vincula
   const requestPermission = useCallback(async () => {
-    if (!('Notification' in window) || !swRegistrationRef.current) {
-      alert('Navegador não suporta Push Notifications.');
+    if (!('Notification' in window)) {
+      alert('Este navegador no suporta notificaes push.');
+      return;
+    }
+
+    const registration = swRegistrationRef.current || await navigator.serviceWorker.ready.catch(() => null);
+    if (!registration) {
+      alert('Service Worker de notificaes ainda no est pronto. Recarregue a pgina e tente novamente.');
       return;
     }
     
@@ -117,9 +128,9 @@ export const NotificationProvider: React.FC<Props> = ({
     setPermissionStatus(result);
 
     if (result === 'granted') {
-      await subscribeToPush(swRegistrationRef.current);
+      await subscribeToPush(registration);
     } else {
-      alert('Permissão de notificações negada. Você não receberá alertas PUSH.');
+      alert('Permisso de notificaes negada. Voc no receber alertas push.');
     }
   }, [subscribeToPush]);
 

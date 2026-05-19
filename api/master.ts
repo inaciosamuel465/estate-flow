@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import { signToken, verifyRequest } from './_lib/auth.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
@@ -20,62 +20,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Tenant invalido' });
     }
 
-    let smtpConfig: {
-      host: string;
-      port: number;
-      secure: boolean;
-      user: string;
-      pass: string;
-      senderName: string;
-      senderEmail: string;
-    } | null = null;
+    let companySettings: Record<string, unknown> | null = null;
 
     if (company_id && dbUrl) {
       try {
         const sql = neon(dbUrl);
         const settings = await sql`SELECT * FROM company_settings WHERE company_id = ${company_id} LIMIT 1`;
-        const s = settings[0];
-        if (s?.smtp_host && s?.smtp_user && s?.smtp_password) {
-          smtpConfig = {
-            host: s.smtp_host,
-            port: Number(s.smtp_port) || 587,
-            secure: s.smtp_secure === true,
-            user: s.smtp_user,
-            pass: s.smtp_password,
-            senderName: s.email_sender_name || 'EstateFlow',
-            senderEmail: s.email_sender_address || s.smtp_user,
-          };
-        }
+        companySettings = settings[0] || null;
       } catch (error) {
         console.warn('Failed to load company SMTP, using fallback:', error);
       }
     }
 
-    const config = smtpConfig || {
-      host: process.env.SMTP_HOST || '',
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      user: process.env.SMTP_USER || '',
-      pass: process.env.SMTP_PASS || '',
-      senderName: 'EstateFlow Suite',
-      senderEmail: process.env.SMTP_USER || '',
-    };
+    const config = resolveSmtpConfig(companySettings, 'EstateFlow Suite');
 
-    if (!config.host || !config.user || !config.pass) {
-      return res.status(500).json({ error: 'SMTP nao configurado' });
+    if (!config) {
+      return res.status(500).json({ error: publicSmtpError() });
     }
 
     try {
       const safeFrom = typeof customFrom === 'string' && customFrom.toLowerCase() === config.senderEmail.toLowerCase()
-        ? customFrom
+         customFrom
         : config.senderEmail;
-      const info = await nodemailer.createTransport({
-        host: config.host,
-        port: config.port,
-        secure: config.secure,
-        auth: { user: config.user, pass: config.pass },
-        tls: { rejectUnauthorized: false },
-      }).sendMail({
+      const info = await createSmtpTransport(config).sendMail({
         from: `"${config.senderName}" <${safeFrom}>`,
         to,
         subject,
@@ -90,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, messageId: info.messageId });
     } catch (error) {
       console.error('Error sending email:', error);
-      return res.status(500).json({ error: 'Failed to send email' });
+      return res.status(500).json({ error: 'Falha ao enviar email. Verifique as credenciais SMTP.' });
     }
   }
 
@@ -101,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (user.role !== 'admin' && user.role !== 'master' && user.role !== 'superadmin') {
       return res.status(403).json({ error: 'Sem permissao' });
     }
-    const companyId = String(req.body?.company_id || user.company_id || '');
+    const companyId = String(req.body.company_id || user.company_id || '');
     if (!companyId) return res.status(400).json({ error: 'company_id obrigatorio' });
     if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
 
@@ -242,16 +209,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const planPrice = Number(s.plan_price) || 170;
       const appUrl = process.env.VITE_APP_URL || 'https://estate-flow-amber.vercel.app';
       const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
-      const to = admin?.email || c.email;
+      const to = admin.email || c.email;
       const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
-      const text = `Olá ${admin?.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
+      const text = `Olá ${admin.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
       const html = `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
           <div style="background:#1e293b;padding:32px;border-radius:16px 16px 0 0;text-align:center;">
             <h1 style="color:#fff;margin:0;font-size:24px;">EstateFlow</h1>
           </div>
           <div style="background:#fff;padding:32px;border:1px solid #e2e8f0;border-radius:0 0 16px 16px;">
-            <h2 style="color:#1e293b;">Olá, ${admin?.name || c.name}!</h2>
+            <h2 style="color:#1e293b;">Olá, ${admin.name || c.name}!</h2>
             <p style="color:#64748b;">Segue o resumo da sua assinatura:</p>
             <div style="background:#f8fafc;border-radius:12px;padding:24px;margin:24px 0;">
               <p style="margin:0;color:#94a3b8;font-size:14px;">Plano</p>

@@ -138,7 +138,7 @@ const App: React.FC = () => {
 
     const unsubscribeNotifications = subscribeToNotifications((notifs) => {
       setNotifications(notifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    }, currentUser?.id ? String(currentUser.id) : undefined);
+    }, currentUser?.id ? String(currentUser?.id) : undefined);
 
     if (isCompanyLoading) {
       return () => {
@@ -216,7 +216,7 @@ const App: React.FC = () => {
         link.rel = 'icon';
         document.head.appendChild(link);
       }
-      link.href = companySettings.favicon_url;
+      link.href = companySettings?.favicon_url;
     }
   }, [settings.primaryColor, companySettings]);
 
@@ -250,7 +250,7 @@ const App: React.FC = () => {
 
   const getLoginPath = (returnPath?: string) => {
     const safeReturnPath = isSafeTenantReturnPath(returnPath || null) ? returnPath : null;
-    const query = safeReturnPath ? `?next=${encodeURIComponent(safeReturnPath)}` : '';
+    const query = safeReturnPath ? `next=${encodeURIComponent(safeReturnPath)}` : '';
     return tenantPrefix ? `${tenantPrefix}/login${query}` : '/';
   };
 
@@ -321,7 +321,7 @@ const App: React.FC = () => {
       return;
     }
 
-    if (isAdminRoute && currentUser.role !== 'admin') {
+    if (isAdminRoute && currentUser?.role !== 'admin') {
       navigate(`${tenantPrefix}/dashboard`, { replace: true });
     }
   }, [currentUser, isAdminRoute, isUserProtectedRoute, isCompanyLoading, isInitialLoading, subpath, tenantPrefix, navigate]);
@@ -442,7 +442,7 @@ const App: React.FC = () => {
             );
 
             if (!existingNotif) {
-              const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+              const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
               await createContractNotification(adminId, contract.id, contract.propertyTitle, 'expiring');
             }
           }
@@ -469,7 +469,7 @@ const App: React.FC = () => {
     setProperties(prev => [newProperty, ...prev]);
     setCurrentView('all-listings');
     await addProperty(newProperty);
-    const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+    const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     await createPropertyNotification(adminId, newProperty.title, 'created');
     await logActivity(adminId, currentUser?.name, 'create', 'property', String(newProperty.id), `Imóvel "${newProperty.title}" cadastrado`);
   };
@@ -483,14 +483,14 @@ const App: React.FC = () => {
       setPropertyToEdit(null);
     }
     await updateProperty(String(id), updatedData);
-    const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+    const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     await logActivity(adminId, currentUser?.name, 'update', 'property', String(id), `Imóvel ID ${id} atualizado`);
   };
 
   const handleDeleteProperty = async (id: number | string) => {
     setProperties(prev => prev.filter(p => p.id !== id));
     await deleteProperty(String(id));
-    const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+    const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     await logActivity(adminId, currentUser?.name, 'delete', 'property', String(id), `Imóvel ID ${id} removido`);
   };
 
@@ -509,7 +509,7 @@ const App: React.FC = () => {
     }
     await addContract(newContract);
 
-    const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+    const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     // Create notifications
     await createContractNotification(adminId, newContract.id, newContract.propertyTitle, 'created');
     await createPropertyNotification(
@@ -535,7 +535,7 @@ const App: React.FC = () => {
   const handleDeleteContract = async (id: number | string) => {
     setContracts(prev => prev.filter(c => c.id !== id));
     await deleteContract(String(id));
-    const adminId = currentUser?.id ? String(currentUser.id) : 'admin';
+    const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     await logActivity(adminId, currentUser?.name, 'delete', 'contract', String(id), `Contrato ID ${id} removido`);
   };
 
@@ -583,7 +583,7 @@ const App: React.FC = () => {
 
   const handleUpdateUser = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
-    const success = await updateUser(String(currentUser.id), updatedData);
+    const success = await updateUser(String(currentUser?.id), updatedData);
     if (success) {
       setCurrentUser(prev => {
         if (!prev) return null;
@@ -608,9 +608,13 @@ const App: React.FC = () => {
       const siteUrl = 'https://estate-flow-amber.vercel.app';
       const loginUrl = `${siteUrl}${tenantPrefix}/login`;
       const companyId = company?.id || localStorage.getItem('estateflow_company_id');
+      const token = localStorage.getItem('ef_token') || '';
       const res = await fetch('/api/email/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           company_id: companyId,
           to: user.email,
@@ -639,8 +643,12 @@ const App: React.FC = () => {
           `,
         }),
       });
-      const data = await res.json();
-      return data.success === true;
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.success !== true) {
+        console.error('Erro ao enviar email:', data?.error || res.statusText);
+        return false;
+      }
+      return true;
     } catch (e) {
       console.error('Erro ao enviar email:', e);
       return false;
@@ -665,7 +673,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const newFavorites = await toggleFavorite(String(currentUser.id), id);
+    const newFavorites = await toggleFavorite(String(currentUser?.id), id);
     if (!newFavorites) return;
     // Atualiza estado local para feedback imediato
     setCurrentUser(prev => {
@@ -674,7 +682,7 @@ const App: React.FC = () => {
       persistUserSession(merged);
       return merged;
     });
-    // alert(`Ação de favoritos salva para ${currentUser.name}!`); // Alert opcional, visual é melhor
+    // alert(`Ação de favoritos salva para ${currentUser?.name}!`); // Alert opcional, visual é melhor
   };
 
   const handleSignContractReal = async (contractId: number | string, signatureImage: string) => {
@@ -711,7 +719,7 @@ const App: React.FC = () => {
   };
 
   const handleClearAllNotifications = async () => {
-    if (confirm('Tem certeza que deseja limpar todas as notificações?')) {
+    if (confirm('Tem certeza que deseja limpar todas as notificações')) {
       await clearAllNotifications();
     }
   };
@@ -779,7 +787,7 @@ const App: React.FC = () => {
     return <Navigate to={getLoginPath(subpath)} replace />;
   }
 
-  if (!isCompanyLoading && isAdminRoute && currentUser && currentUser.role !== 'admin') {
+  if (!isCompanyLoading && isAdminRoute && currentUser && currentUser?.role !== 'admin') {
     return <Navigate to={`${tenantPrefix}/dashboard`} replace />;
   }
 
@@ -976,9 +984,9 @@ const App: React.FC = () => {
 
               <div className="mt-4 pt-6 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-full bg-cover bg-center border border-slate-200" style={{ backgroundImage: currentUser.avatar ? `url("${currentUser.avatar}")` : 'none' }}></div>
+                  <div className="size-10 rounded-full bg-cover bg-center border border-slate-200" style={{ backgroundImage: currentUser?.avatar ? `url("${currentUser?.avatar}")` : 'none' }}></div>
                   <div>
-                    <p className="font-bold text-sm text-slate-900 dark:text-white">{currentUser.name}</p>
+                    <p className="font-bold text-sm text-slate-900 dark:text-white">{currentUser?.name}</p>
                     <button onClick={() => { setCurrentView('profile-settings'); setIsMobileMenuOpen(false); }} className="text-xs text-primary font-bold">Ver Perfil</button>
                   </div>
                 </div>
@@ -1157,7 +1165,7 @@ const App: React.FC = () => {
           <ProfileSettings
             user={currentUser}
             onSave={handleUpdateUser}
-            onBack={() => setCurrentView(currentUser.role === 'admin' && isAdminRoute ? 'dashboard' : 'user-dashboard')}
+            onBack={() => setCurrentView(currentUser?.role === 'admin' && isAdminRoute ? 'dashboard' : 'user-dashboard')}
           />
         </PublicLayout>
       </NotificationProvider>
@@ -1183,7 +1191,7 @@ const App: React.FC = () => {
           />
           <WhatsAppButton
             phoneNumber="5515997241175"
-            propertyTitle={properties.find(p => p.id === selectedPropertyId)?.title}
+            propertyTitle={properties.find(p => p.id === selectedPropertyId).title}
           />
         </PublicLayout>
       </NotificationProvider>
@@ -1253,8 +1261,8 @@ const App: React.FC = () => {
 const NavButton = ({ active, onClick, icon, tooltip }: { active: boolean; onClick: () => void; icon: string; tooltip: string }) => (
   <button
     onClick={onClick}
-    className={`group relative flex items-center justify-center w-full aspect-square rounded-xl transition-all ${active
-      ? 'bg-primary text-white shadow-lg shadow-primary/30'
+    className={`group relative flex items-center justify-center w-full aspect-square rounded-xl transition-all ${active ?
+       'bg-primary text-white shadow-lg shadow-primary/30'
       : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
       }`}
   >
@@ -1268,8 +1276,8 @@ const NavButton = ({ active, onClick, icon, tooltip }: { active: boolean; onClic
 const MobileAdminNavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: string; label: string }) => (
   <button
     onClick={onClick}
-    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-3xl transition-all ${active
-      ? 'bg-primary text-white shadow-xl shadow-primary/30'
+    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-3xl transition-all ${active ?
+       'bg-primary text-white shadow-xl shadow-primary/30'
       : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
       }`}
   >

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as nodemailer from 'nodemailer';
 import { assertTenantAccess, fail, getSql, handleApiError, ok, requireAuth } from './_lib/http.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
 
 async function ensureDocumentSchema(sql: ReturnType<typeof getSql>) {
   await sql`
@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await ensureDocumentSchema(sql);
 
     const user = getOptionalUser(req);
-    const companyId = String(req.body?.company_id || user?.company_id || '');
+    const companyId = String(req.body.company_id || user.company_id || '');
     if (!companyId) return fail(res, 400, 'company_id obrigatorio');
     if (user) assertTenantAccess(user, companyId);
 
@@ -97,25 +97,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `;
       if (docs.length === 0) return fail(res, 404, 'Documento nao encontrado neste tenant');
       const doc = docs[0];
-      const smtpReady = Boolean(doc.smtp_host && doc.smtp_user && doc.smtp_password);
+      const config = resolveSmtpConfig(doc, String(doc.company_name || 'EstateFlow'));
       const logId = `elog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const mailSubject = subject || `${doc.title} - ${doc.property_title || 'Imóvel'}`;
-      if (!smtpReady) {
+      if (!config) {
         await sql`
           INSERT INTO email_logs (id, company_id, user_id, to_email, subject, status, provider, error, entity_type, entity_id)
-          VALUES (${logId}, ${companyId}, ${user?.id || null}, ${String(to_email)}, ${mailSubject}, 'pending_configuration', NULL, 'SMTP da imobiliaria nao configurado', 'property_document', ${String(document_id)})
+          VALUES (${logId}, ${companyId}, ${user?.id || null}, ${String(to_email)}, ${mailSubject}, 'pending_configuration', NULL, ${publicSmtpError()}, 'property_document', ${String(document_id)})
         `;
-        return fail(res, 409, 'Configure o SMTP da imobiliaria antes de enviar documentos por email', { log_id: logId });
+        return fail(res, 409, publicSmtpError(), { log_id: logId });
       }
 
-      const senderEmail = String(doc.email_sender_address || doc.smtp_user);
-      const senderName = String(doc.email_sender_name || doc.company_name || 'EstateFlow');
-      const transporter = nodemailer.createTransport({
-        host: doc.smtp_host,
-        port: Number(doc.smtp_port || 587),
-        secure: doc.smtp_secure === true,
-        auth: { user: doc.smtp_user, pass: doc.smtp_password },
-      });
+      const senderEmail = config.senderEmail;
+      const senderName = config.senderName;
+      const transporter = createSmtpTransport(config);
       const info = await transporter.sendMail({
         from: `"${senderName.replace(/"/g, '')}" <${senderEmail}>`,
         to: String(to_email),
@@ -131,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sql`UPDATE property_process_documents SET sent_at = NOW() WHERE id = ${String(document_id)} AND company_id = ${companyId}`;
       await sql`
         INSERT INTO email_logs (id, company_id, user_id, to_email, subject, status, provider, message_id, entity_type, entity_id)
-        VALUES (${logId}, ${companyId}, ${user?.id || null}, ${String(to_email)}, ${mailSubject}, 'sent', 'smtp', ${info.messageId || null}, 'property_document', ${String(document_id)})
+        VALUES (${logId}, ${companyId}, ${user?.id || null}, ${String(to_email)}, ${mailSubject}, 'sent', ${config.source === 'company' ? 'smtp' : 'smtp_env'}, ${info.messageId || null}, 'property_document', ${String(document_id)})
       `;
       return ok(res, { data: { log_id: logId, status: 'sent' } });
     }

@@ -12,7 +12,7 @@ function getCompanyId(): string | null {
     }
 }
 
-function requireCompanyId(operation = 'operaÃ§Ã£o'): string {
+function requireCompanyId(operation = 'operação'): string {
     const companyId = getCompanyId();
     if (!companyId) {
         throw new Error(`Tenant/company_id ausente para ${operation}.`);
@@ -45,7 +45,7 @@ export async function getProperties(): Promise<Property[]> {
 
 export async function addProperty(property: Property): Promise<string> {
     const id = property.id ? String(property.id) : Math.random().toString(36).substr(2, 9);
-    const companyId = requireCompanyId('criar imÃ³vel');
+    const companyId = requireCompanyId('criar imóvel');
     await sql`
         INSERT INTO properties (
             id, title, location, area, price, type, purpose, owner_id, status, 
@@ -81,7 +81,7 @@ export async function addProperty(property: Property): Promise<string> {
 
 export async function updateProperty(id: string, updates: Partial<Property>): Promise<void> {
     try {
-        const companyId = requireCompanyId('atualizar imÃ³vel');
+        const companyId = requireCompanyId('atualizar imóvel');
         const sets: string[] = [];
         const params: any[] = [];
         let paramIdx = 1;
@@ -122,7 +122,7 @@ export async function updateProperty(id: string, updates: Partial<Property>): Pr
 }
 
 export async function deleteProperty(id: string): Promise<void> {
-    const companyId = requireCompanyId('excluir imÃ³vel');
+    const companyId = requireCompanyId('excluir imóvel');
     await sql`DELETE FROM property_views WHERE property_id = ${id} AND company_id = ${companyId}`;
     await sql`DELETE FROM leads WHERE property_id = ${id} AND company_id = ${companyId}`;
     await sql`DELETE FROM properties WHERE id = ${id} AND company_id = ${companyId}`;
@@ -133,7 +133,7 @@ export async function deleteProperty(id: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function trackPropertyView(propertyId: string, userId?: string, source = 'web'): Promise<void> {
-    const companyId = requireCompanyId('registrar visualizaÃ§Ã£o');
+    const companyId = requireCompanyId('registrar visualização');
     await sql`
         INSERT INTO property_views (property_id, user_id, source, company_id)
         VALUES (${propertyId}, ${userId || null}, ${source}, ${companyId})
@@ -143,7 +143,7 @@ export async function trackPropertyView(propertyId: string, userId?: string, sou
 }
 
 export async function getPropertyViewsCount(propertyId: string): Promise<number> {
-    const companyId = requireCompanyId('contar visualizaÃ§Ãµes');
+    const companyId = requireCompanyId('contar visualizações');
     const result = await sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId}`;
     return Number(result[0]?.count || 0);
 }
@@ -154,7 +154,7 @@ export async function getPropertyAnalytics(propertyId: string): Promise<{
     viewsToday: number;
     totalLeads: number;
 }> {
-    const companyId = requireCompanyId('consultar analytics do imÃ³vel');
+    const companyId = requireCompanyId('consultar analytics do imóvel');
     const [total, weekly, today, leads] = await Promise.all([
         sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId}`,
         sql`SELECT COUNT(*) as count FROM property_views WHERE property_id = ${propertyId} AND company_id = ${companyId} AND viewed_at >= NOW() - INTERVAL '7 days'`,
@@ -203,7 +203,7 @@ async function ensureTenantUserSchema(): Promise<void> {
 }
 
 export async function upsertUser(user: User): Promise<void> {
-    const companyId = (user as any).company_id || requireCompanyId('salvar usuÃ¡rio');
+    const companyId = (user as any).company_id || requireCompanyId('salvar usuário');
     await ensureTenantUserSchema();
     await sql`
         INSERT INTO users (id, name, email, phone, role, document, address, favorites, password, avatar, company_id)
@@ -225,7 +225,7 @@ export async function upsertUser(user: User): Promise<void> {
 }
 
 export async function deleteUser(id: string): Promise<void> {
-    const cid = requireCompanyId('excluir usuÃ¡rio');
+    const cid = requireCompanyId('excluir usuário');
     await sql`DELETE FROM users WHERE id = ${id} AND company_id = ${cid}`;
 }
 
@@ -939,7 +939,7 @@ export async function addNotification(notification: Omit<AppNotification, 'id' |
         ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium',
         ADD COLUMN IF NOT EXISTS icon TEXT
     `;
-    const companyId = requireCompanyId('criar notificaÃ§Ã£o');
+    const companyId = requireCompanyId('criar notificação');
     await sql`
         INSERT INTO notifications (user_id, type, title, message, action_url, icon, priority, company_id)
         VALUES (${notification.userId || null}, ${notification.type}, ${notification.title}, 
@@ -949,7 +949,7 @@ export async function addNotification(notification: Omit<AppNotification, 'id' |
 }
 
 export async function getNotifications(userId: string): Promise<AppNotification[]> {
-    const companyId = requireCompanyId('consultar notificaÃ§Ãµes');
+    const companyId = requireCompanyId('consultar notificações');
     const result = await sql`
         SELECT * FROM notifications WHERE user_id = ${userId} AND company_id = ${companyId}
         ORDER BY created_at DESC LIMIT 50
@@ -968,22 +968,22 @@ export async function getNotifications(userId: string): Promise<AppNotification[
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-    const companyId = requireCompanyId('marcar notificaÃ§Ã£o');
+    const companyId = requireCompanyId('marcar notificação');
     await sql`UPDATE notifications SET read = TRUE WHERE id = ${id} AND company_id = ${companyId}`;
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-    const companyId = requireCompanyId('marcar notificaÃ§Ãµes');
+    const companyId = requireCompanyId('marcar notificações');
     await sql`UPDATE notifications SET read = TRUE WHERE user_id = ${userId} AND company_id = ${companyId}`;
 }
 
 export async function deleteNotificationById(id: string): Promise<void> {
-    const companyId = requireCompanyId('excluir notificaÃ§Ã£o');
+    const companyId = requireCompanyId('excluir notificação');
     await sql`DELETE FROM notifications WHERE id = ${id} AND company_id = ${companyId}`;
 }
 
 export async function clearNotifications(userId: string): Promise<void> {
-    const companyId = requireCompanyId('limpar notificaÃ§Ãµes');
+    const companyId = requireCompanyId('limpar notificações');
     await sql`DELETE FROM notifications WHERE user_id = ${userId} AND company_id = ${companyId}`;
 }
 
@@ -1150,7 +1150,7 @@ export async function getSettings(): Promise<Record<string, string>> {
 }
 
 export async function updateSetting(key: string, value: string): Promise<void> {
-    const companyId = requireCompanyId('atualizar configuraÃ§Ã£o');
+    const companyId = requireCompanyId('atualizar configuração');
     const scopedKey = `${companyId}:${key}`;
     await sql`
         INSERT INTO system_settings (key, value, updated_at)

@@ -9,10 +9,10 @@ interface UserDashboardProps {
     contracts: Contract[];
     onPropertySelect: (id: number | string) => void;
     onLogout: () => void;
-    onEditProfile?: () => void;
-    onUpdateContract?: (id: number | string, data: Partial<Contract>) => void;
-    onToggleFavorite?: (id: number | string) => Promise<void> | void;
-    onAdvertiseClick?: () => void;
+    onEditProfile: () => void;
+    onUpdateContract: (id: number | string, data: Partial<Contract>) => void;
+    onToggleFavorite: (id: number | string) => Promise<void> | void;
+    onAdvertiseClick: () => void;
 }
 
 const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -89,17 +89,17 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 md:px-8 py-8">
+            <main className="max-w-7xl mx-auto px-4 md:px-8 py-4 md:py-8 overflow-x-hidden">
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-8">
                     {/* Sidebar Navigation */}
                     {/* Sidebar Navigation (Desktop) & Mobile Header */}
                     <div className="lg:col-span-1">
-                        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 sticky top-24">
-                            <div className="flex flex-row lg:flex-col items-center gap-4 lg:gap-0 mb-6 lg:mb-6">
+                        <div className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-slate-200 lg:sticky lg:top-24 min-w-0">
+                            <div className="flex flex-row lg:flex-col items-center gap-4 lg:gap-0 mb-4 lg:mb-6 min-w-0">
                                 <div className="size-16 lg:size-24 rounded-full bg-slate-200 bg-cover bg-center border-2 lg:border-4 border-slate-50 lg:mb-3 shrink-0" style={{ backgroundImage: user.avatar ? `url("${user.avatar}")` : 'none' }}></div>
-                                <div className="flex flex-col items-start lg:items-center">
-                                    <h2 className="text-xl font-bold text-slate-900 leading-tight">{user.name}</h2>
+                                <div className="flex flex-col items-start lg:items-center min-w-0">
+                                    <h2 className="text-lg md:text-xl font-bold text-slate-900 leading-tight break-words">{user.name}</h2>
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide mt-1 lg:mt-2 ${user.role === 'owner' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                         {user.role === 'owner' ? 'Proprietário' : 'Cliente VIP'}
                                     </span>
@@ -149,7 +149,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
 
                     {/* Content Area */}
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-3 min-w-0">
                         {activeTab === 'profile' && (
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                                 <div className="p-6 border-b border-slate-100">
@@ -242,22 +242,22 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                         <div className="flex gap-6 mt-6">
                                                             <div className="flex flex-col">
                                                                 <span className="text-xs text-slate-400 font-bold uppercase">Visualizações</span>
-                                                                <span className="text-xl font-bold text-slate-900">{property.stats?.views || 0}</span>
+                                                                <span className="text-xl font-bold text-slate-900">{property.stats.views || 0}</span>
                                                             </div>
                                                             <div className="flex flex-col">
                                                                 <span className="text-xs text-slate-400 font-bold uppercase">Favoritos</span>
-                                                                <span className="text-xl font-bold text-slate-900">{property.stats?.likes || 0}</span>
+                                                                <span className="text-xl font-bold text-slate-900">{property.stats.likes || 0}</span>
                                                             </div>
                                                             <div className="flex flex-col">
                                                                 <span className="text-xs text-slate-400 font-bold uppercase">Interessados</span>
-                                                                <span className="text-xl font-bold text-slate-900 text-primary">{property.stats?.leads || 0}</span>
+                                                                <span className="text-xl font-bold text-slate-900 text-primary">{property.stats.leads || 0}</span>
                                                             </div>
                                                         </div>
                                                     </div>
 
                                                     <div className="mt-6 flex gap-3 pt-4 border-t border-slate-100">
                                                         <button onClick={() => onPropertySelect(property.id)} className="text-sm font-bold text-primary hover:underline">Ver Anúncio</button>
-                                                        <span className="ml-auto text-xs font-bold text-slate-400">AlteraÃ§Ãµes pelo admin</span>
+                                                        <span className="ml-auto text-xs font-bold text-slate-400">Alterações pelo admin</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -269,13 +269,13 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
                         {activeTab === 'juridico' && (
                             <div className="space-y-6">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
                                     <div>
                                         <h3 className="text-xl font-bold text-slate-900">Gestão de Contratos</h3>
                                         <p className="text-slate-500 text-sm">Visualize seus documentos, assine contratos e gerencie pagamentos.</p>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                        <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 w-full md:w-auto">
                                             <div className="size-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
                                                 <span className="material-symbols-outlined">verified</span>
                                             </div>
@@ -300,14 +300,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                 ) : (
                                     <div className="grid grid-cols-1 gap-6">
                                         {myContracts.map(contract => (
-                                            <div key={contract.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
-                                                <div className="p-6 md:p-8">
+                                            <div key={contract.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all min-w-0">
+                                                <div className="p-4 md:p-8">
                                                     <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                                                         {/* Imagem do Imóvel */}
                                                         <div className="w-full md:w-32 h-24 md:h-32 rounded-xl bg-cover bg-center shrink-0 border border-slate-100" style={{ backgroundImage: `url("${contract.propertyImage}")` }}></div>
 
-                                                        <div className="flex-1 space-y-4">
-                                                            <div className="flex flex-row md:items-start justify-between gap-2">
+                                                        <div className="flex-1 space-y-4 min-w-0">
+                                                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 min-w-0">
                                                                 <div className="min-w-0">
                                                                     <div className="flex flex-wrap items-center gap-2 mb-1">
                                                                         <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${contract.type === 'rent' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -317,19 +317,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                             {contract.signatureStatus === 'signed' ? 'Assinado' : 'Pendência'}
                                                                         </span>
                                                                     </div>
-                                                                    <h4 className="font-bold text-base md:text-lg text-slate-900 leading-tight truncate">{contract.propertyTitle}</h4>
+                                                                    <h4 className="font-bold text-base md:text-lg text-slate-900 leading-tight break-words">{contract.propertyTitle}</h4>
                                                                     <p className="text-slate-500 text-[11px] md:text-sm flex items-center gap-1">
                                                                         <span className="material-symbols-outlined text-[14px]">calendar_month</span>
                                                                         {new Date(contract.startDate).toLocaleDateString('pt-BR')}
                                                                     </p>
                                                                 </div>
-                                                                <div className="text-right shrink-0">
+                                                                <div className="sm:text-right shrink-0">
                                                                     <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase">Valor</p>
                                                                     <p className="text-base md:text-xl font-black text-slate-900 leading-none">R$ {contract.value.toLocaleString('pt-BR')}</p>
                                                                 </div>
                                                             </div>
 
-                                                            <div className="grid grid-cols-3 md:grid-cols-4 gap-2 md:gap-4 p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 md:gap-4 p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-100">
                                                                 <div>
                                                                     <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase">Vencto</p>
                                                                     <p className="text-xs md:text-sm font-bold text-slate-700">D{contract.dueDay}</p>
@@ -353,7 +353,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                 </div>
                                                             </div>
 
-                                                            <div className="flex flex-wrap gap-3 pt-2">
+                                                            <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-3 pt-2">
                                                                 {contract.signatureStatus === 'pending' ? (
                                                                     <button
                                                                         onClick={() => handleSignContract(contract)}
@@ -363,12 +363,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                         Assinar Agora
                                                                     </button>
                                                                 ) : (
-                                                                    <button disabled title="A cÃ³pia em PDF serÃ¡ liberada pela imobiliÃ¡ria." className="flex-1 md:flex-none px-6 py-2.5 border border-slate-200 text-slate-400 rounded-xl font-bold text-sm bg-slate-50 cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                                                                    <button disabled title="A cópia em PDF será liberada pela imobiliária." className="flex-1 md:flex-none px-6 py-2.5 border border-slate-200 text-slate-400 rounded-xl font-bold text-sm bg-slate-50 cursor-not-allowed transition-all flex items-center justify-center gap-2">
                                                                         <span className="material-symbols-outlined">download</span> Baixar Cópia
                                                                     </button>
                                                                 )}
                                                                 {contract.nextPaymentStatus !== 'paid' && (
-                                                                    <button disabled title="Envio de comprovante ainda nÃ£o estÃ¡ configurado para este tenant." className="md:ml-auto flex-1 md:flex-none px-6 py-2.5 bg-slate-200 text-slate-500 rounded-xl font-bold text-sm cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                                                                    <button disabled title="Envio de comprovante ainda não está configurado para este tenant." className="md:ml-auto flex-1 md:flex-none px-6 py-2.5 bg-slate-200 text-slate-500 rounded-xl font-bold text-sm cursor-not-allowed transition-all flex items-center justify-center gap-2">
                                                                         <span className="material-symbols-outlined">upload_file</span> Enviar Comprovante
                                                                     </button>
                                                                 )}

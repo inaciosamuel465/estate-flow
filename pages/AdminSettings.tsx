@@ -8,7 +8,7 @@ import { OFFICIAL_CONTRACT_TEMPLATES } from '../src/contracts/templates';
 interface AdminSettingsProps {
     settings: Record<string, string>;
     onSettingsUpdated: (newSettings: Record<string, string>) => void;
-    users?: User[];
+    users: User[];
 }
 
 const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users }) => {
@@ -16,7 +16,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
     const { company, companySettings, refreshCompany } = useCompany();
     const [testEmail, setTestEmail] = useState('');
     const [isTestingEmail, setIsTestingEmail] = useState(false);
-    const [testPushMessage, setTestPushMessage] = useState('Este Ã© um teste de notificaÃ§Ã£o push do EstateFlow!');
+    const [testPushMessage, setTestPushMessage] = useState('Este é um teste de notificação push do EstateFlow!');
     const [isTestingPush, setIsTestingPush] = useState(false);
 
     const adminUsers = useMemo(() => (users || []).filter(u => u.role === 'admin'), [users]);
@@ -41,7 +41,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         socialFacebook: settings.socialFacebook || '',
         socialWhatsapp: settings.socialWhatsapp || '',
         aiModel: settings.aiModel || 'gemini-1.5-flash',
-        aiPromptBase: settings.aiPromptBase || 'VocÃª Ã© um assistente imobiliÃ¡rio de elite...',
+        aiPromptBase: settings.aiPromptBase || 'Você é um assistente imobiliário de elite...',
         pixKey: settings.pixKey || '',
         pixBeneficiary: settings.pixBeneficiary || '',
         smtp_host: companySettings?.smtp_host || '',
@@ -65,20 +65,25 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         setIsTestingEmail(true);
         try {
             const companyId = localStorage.getItem('estateflow_company_id');
+            const token = localStorage.getItem('ef_token') || '';
             const res = await fetch('/api/email/send', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({
                     company_id: companyId,
                     to: testEmail,
                     subject: 'Teste de E-mail - EstateFlow Suite',
-                    html: `<h1>Teste com sucesso!</h1><p>Se vocÃª recebeu este e-mail, as configuraÃ§Ãµes de SMTP estÃ£o funcionando.</p>`
+                    html: `<h1>Teste com sucesso!</h1><p>Se você recebeu este e-mail, as configurações de SMTP estão funcionando.</p>`
                 })
             });
-            if (res.ok) alert('E-mail de teste enviado!');
-            else alert('Erro ao enviar e-mail. Verifique as configuraÃ§Ãµes SMTP.');
+            const data = await res.json().catch(() => null);
+            if (res.ok && data.success) alert('E-mail de teste enviado!');
+            else alert(data.error || 'Erro ao enviar e-mail. Verifique as configurações SMTP.');
         } catch (e) {
-            alert('Erro de conexÃ£o ao enviar e-mail.');
+            alert('Erro de conexão ao enviar e-mail.');
         } finally {
             setIsTestingEmail(false);
         }
@@ -87,20 +92,26 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
     const handleTestPush = async () => {
         setIsTestingPush(true);
         try {
+            const companyId = localStorage.getItem('estateflow_company_id');
+            const token = localStorage.getItem('ef_token') || '';
             const res = await fetch('/api/push/send', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({
-                    title: 'ðŸ“¢ Teste de NotificaÃ§Ã£o',
+                    title: 'Teste de Notificação',
                     body: testPushMessage,
-                    url: '/'
+                    url: '/',
+                    companyId,
                 })
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => null);
             if (res.ok) alert(`Push disparado para ${data.count} dispositivos inscritos.`);
-            else alert('Erro ao disparar push.');
+            else alert(data.error || 'Erro ao disparar push.');
         } catch (e) {
-            alert('Erro de conexÃ£o ao disparar push.');
+            alert('Erro de conexão ao disparar push.');
         } finally {
             setIsTestingPush(false);
         }
@@ -111,7 +122,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
 
     const handleBroadcast = async () => {
         if (!broadcastMessage.title || !broadcastMessage.body) {
-            alert('Preencha tÃ­tulo e mensagem.');
+            alert('Preencha título e mensagem.');
             return;
         }
         setIsBroadcasting(true);
@@ -121,11 +132,12 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('ef_token') || ''}` },
                 body: JSON.stringify({ ...broadcastMessage, companyId: localStorage.getItem('estateflow_company_id') })
             });
+            const data = await res.json().catch(() => null);
             if (res.ok) {
-                alert('AnÃºncio enviado com sucesso para todos os inscritos!');
+                alert('Anúncio enviado com sucesso para todos os inscritos!');
                 setBroadcastMessage({ title: '', body: '', url: '/' });
             } else {
-                alert('Erro ao enviar broadcast.');
+                alert(data.error || 'Erro ao enviar broadcast.');
             }
         } catch (e) {
             alert('Erro de rede ao enviar broadcast.');
@@ -135,7 +147,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
     };
 
     const handleProvisionTestData = async () => {
-        if (!confirm('Isso criarÃ¡ usuÃ¡rios de teste (Admin, Cliente, ProprietÃ¡rio) no banco de dados. Deseja continuar?')) return;
+        if (!confirm('Isso criará usuários de teste (Admin, Cliente, Proprietário) no banco de dados. Deseja continuar')) return;
         try {
             // We use a dedicated API or we can try to do it via dataService if allowed
             // But since this is a server-side thing, let's use an API endpoint
@@ -147,7 +159,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             if (res.ok) alert('Dados de teste provisionados com sucesso!');
             else alert('Erro ao provisionar dados.');
         } catch (e) {
-            alert('Erro de conexÃ£o ao provisionar dados.');
+            alert('Erro de conexão ao provisionar dados.');
         }
     };
 
@@ -224,11 +236,11 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             
             onSettingsUpdated(localSettings);
             
-            setSaveMessage('ConfiguraÃ§Ãµes salvas com sucesso!');
+            setSaveMessage('Configurações salvas com sucesso!');
             setTimeout(() => setSaveMessage(''), 3000);
         } catch (error) {
             console.error('Error saving settings', error);
-            setSaveMessage('Erro ao salvar configuraÃ§Ãµes.');
+            setSaveMessage('Erro ao salvar configurações.');
         } finally {
             setIsSaving(false);
         }
@@ -236,24 +248,24 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
 
     const tabs = [
         { id: 'branding', label: 'Identidade Visual', icon: 'palette' },
-        { id: 'contact', label: 'Perfil da ImobiliÃ¡ria', icon: 'business' },
+        { id: 'contact', label: 'Perfil da Imobiliária', icon: 'business' },
         { id: 'contracts', label: 'Contratos', icon: 'description' },
-        { id: 'ai', label: 'InteligÃªncia Artificial', icon: 'smart_toy' },
+        { id: 'ai', label: 'Inteligência Artificial', icon: 'smart_toy' },
         { id: 'finance', label: 'Financeiro (PIX)', icon: 'payments' },
-        { id: 'broadcast', label: 'AnÃºncios / Push', icon: 'campaign' },
-        { id: 'sync', label: 'App & NotificaÃ§Ãµes', icon: 'notifications_active' },
+        { id: 'broadcast', label: 'Anúncios / Push', icon: 'campaign' },
+        { id: 'sync', label: 'App & Notificações', icon: 'notifications_active' },
         { id: 'smtp', label: 'E-mail SMTP', icon: 'mail' },
     ];
 
     return (
         <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
             {/* Header Fixo */}
-            <div className="p-4 md:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between z-20 gap-4 flex-shrink-0">
+            <div className="p-3 md:p-6 bg-white border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between z-20 gap-3 md:gap-4 flex-shrink-0">
                 <div>
-                    <h1 className="text-xl md:text-3xl font-bold text-slate-800">ConfiguraÃ§Ãµes</h1>
+                    <h1 className="text-xl md:text-3xl font-bold text-slate-800">Configurações</h1>
                     <p className="text-xs md:text-sm text-slate-500">Gerencie sua plataforma</p>
                 </div>
-                
+
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                     {saveMessage && (
                         <span className={`px-3 py-1 rounded-full text-[10px] md:text-sm font-medium whitespace-nowrap ${saveMessage.includes('Erro') ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600 animate-pulse'}`}>
@@ -263,7 +275,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                     <button 
                         onClick={handleSave}
                         disabled={isSaving}
-                        className="px-6 md:px-8 py-2 md:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 text-sm"
+                        className="px-4 md:px-8 py-2 md:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all shadow-lg shadow-indigo-200 flex items-center gap-2 text-sm"
                     >
                         {isSaving ? (
                             <>
@@ -281,15 +293,15 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             </div>
 
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                {/* Sidebar de NavegaÃ§Ã£o / Tab Bar Mobile */}
+                {/* Sidebar de Navegação / Tab Bar Mobile */}
                 <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-2 md:p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar flex-shrink-0">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                                activeTab === tab.id 
-                                ? 'bg-indigo-50 text-indigo-600 shadow-sm' 
+                            className={`flex shrink-0 items-center gap-2 md:gap-3 px-3 md:px-4 py-2.5 md:py-3 rounded-xl text-xs md:text-sm font-bold transition-all whitespace-nowrap ${
+                                activeTab === tab.id ?
+                                 'bg-indigo-50 text-indigo-600 shadow-sm' 
                                 : 'text-slate-500 hover:bg-slate-50'
                             }`}
                         >
@@ -299,13 +311,13 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                     ))}
                 </div>
 
-                {/* Ãrea de ConteÃºdo com Scroll */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+                {/* Área de Conteúdo com Scroll */}
+                <div className="flex-1 overflow-y-auto p-3 md:p-8 custom-scrollbar">
                     <form onSubmit={handleSave} className="max-w-4xl mx-auto space-y-8 pb-12">
                         
                         {activeTab === 'branding' && (
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+                                <div className="bg-white p-4 md:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6 md:space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                         <span className="material-symbols-outlined text-indigo-500 text-3xl">palette</span>
                                         Identidade Visual
@@ -336,7 +348,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                         <div className="flex flex-col md:flex-row items-start gap-8">
                                             <div className="w-full md:w-1/2 space-y-4">
                                                 <div 
-                                                    onClick={() => fileInputRef.current?.click()}
+                                                    onClick={() => fileInputRef.current.click()}
                                                     className="w-full h-40 border-2 border-dashed border-slate-300 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-all group"
                                                 >
                                                     <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-indigo-500 transition-colors">upload_file</span>
@@ -367,7 +379,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                             <div className="w-full md:w-1/2 p-6 bg-slate-100 rounded-3xl border border-slate-200 flex flex-col items-center justify-center min-h-[160px]">
                                                 {localSettings.logoUrl ? (
                                                     <>
-                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">PrÃ©-visualizaÃ§Ã£o</p>
+                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Pré-visualização</p>
                                                         <img src={localSettings.logoUrl} alt="Logo Preview" className="max-h-20 object-contain drop-shadow-md" />
                                                     </>
                                                 ) : (
@@ -388,13 +400,13 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                         <span className="material-symbols-outlined text-blue-600 text-3xl">business</span>
-                                        Perfil da ImobiliÃ¡ria
+                                        Perfil da Imobiliária
                                     </h2>
 
-                                    {/* Dados da ImobiliÃ¡ria */}
+                                    {/* Dados da Imobiliária */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">Nome da ImobiliÃ¡ria</label>
+                                            <label className="block text-sm font-bold text-slate-700">Nome da Imobiliária</label>
                                             <input 
                                                 type="text" 
                                                 name="companyName"
@@ -449,14 +461,14 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                             />
                                         </div>
                                         <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">EndereÃ§o da Sede</label>
+                                            <label className="block text-sm font-bold text-slate-700">Endereço da Sede</label>
                                             <input 
                                                 type="text" 
                                                 name="address"
                                                 value={localSettings.address}
                                                 onChange={handleChange}
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
-                                                placeholder="Av. Paulista, 1000 - SÃ£o Paulo, SP"
+                                                placeholder="Av. Paulista, 1000 - São Paulo, SP"
                                             />
                                         </div>
                                         <div className="space-y-4 md:col-span-2">
@@ -472,7 +484,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                             <p className="text-xs text-slate-400">Usado nos e-mails de assinatura de contrato. Se vazio, usa <code className="bg-slate-100 px-1 rounded">{import.meta.env.VITE_APP_URL || 'window.location.origin'}</code></p>
                                         </div>
                                         <div className="space-y-4 md:col-span-2">
-                                            <label className="block text-sm font-bold text-slate-700">VÃ­deo do Hero (YouTube ou Google Drive)</label>
+                                            <label className="block text-sm font-bold text-slate-700">Vídeo do Hero (YouTube ou Google Drive)</label>
                                             <input 
                                                 type="text" 
                                                 name="heroVideoUrl"
@@ -481,7 +493,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
                                                 placeholder="https://www.youtube.com/watch?v=UBdgfwoZpNE"
                                             />
-                                            <p className="text-xs text-slate-400">Link do YouTube para o fundo do hero na pÃ¡gina inicial. Formatos aceitos: youtube.com/watch?v=, youtu.be/, youtube.com/embed/. Deixe vazio para usar o padrÃ£o.</p>
+                                            <p className="text-xs text-slate-400">Link do YouTube para o fundo do hero na página inicial. Formatos aceitos: youtube.com/watch?v=, youtu.be/, youtube.com/embed/. Deixe vazio para usar o padrão.</p>
                                         </div>
                                     </div>
 
@@ -489,13 +501,13 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                     <div className="pt-4 border-t border-slate-100">
                                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6">
                                             <span className="material-symbols-outlined text-blue-600">badge</span>
-                                            Assinatura Digital da ImobiliÃ¡ria
+                                            Assinatura Digital da Imobiliária
                                         </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
                                                 <label className="block text-sm font-bold text-slate-700">Rubrica / Carimbo (imagem)</label>
                                                 <div
-                                                    onClick={() => document.getElementById('stampInput')?.click()}
+                                                    onClick={() => document.getElementById('stampInput').click()}
                                                     className="w-full h-36 border-2 border-dashed border-blue-300 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all group"
                                                 >
                                                     {localSettings.agencyStampUrl ? (
@@ -515,7 +527,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                             if (!file) return;
                                                             const reader = new FileReader();
                                                             reader.onload = (ev) => {
-                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target?.result as string }));
+                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target.result as string }));
                                                             };
                                                             reader.readAsDataURL(file);
                                                         }}
@@ -531,9 +543,9 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                     value={localSettings.agencyStampName || ''}
                                                     onChange={handleChange}
                                                     className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
-                                                    placeholder="Ex: Nome do ResponsÃ¡vel ou RazÃ£o Social"
+                                                    placeholder="Ex: Nome do Responsável ou Razão Social"
                                                 />
-                                                <p className="text-xs text-slate-400">Este nome aparecerÃ¡ na linha de assinatura da imobiliÃ¡ria nos contratos.</p>
+                                                <p className="text-xs text-slate-400">Este nome aparecerá na linha de assinatura da imobiliária nos contratos.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -590,17 +602,17 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                         {activeTab === 'contracts' && (
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
-                                    {/* Rubrica e Nome da ImobiliÃ¡ria */}
+                                    {/* Rubrica e Nome da Imobiliária */}
                                     <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-200 space-y-6">
                                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                             <span className="material-symbols-outlined text-blue-600">badge</span>
-                                            Assinatura da ImobiliÃ¡ria
+                                            Assinatura da Imobiliária
                                         </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="space-y-4">
                                                 <label className="block text-sm font-bold text-slate-700">Rubrica / Carimbo (imagem)</label>
                                                 <div
-                                                    onClick={() => document.getElementById('stampInput')?.click()}
+                                                    onClick={() => document.getElementById('stampInput').click()}
                                                     className="w-full h-36 border-2 border-dashed border-blue-300 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all group"
                                                 >
                                                     {localSettings.agencyStampUrl ? (
@@ -620,7 +632,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                             if (!file) return;
                                                             const reader = new FileReader();
                                                             reader.onload = (ev) => {
-                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target?.result as string }));
+                                                                setLocalSettings(prev => ({ ...prev, agencyStampUrl: ev.target.result as string }));
                                                             };
                                                             reader.readAsDataURL(file);
                                                         }}
@@ -629,21 +641,21 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
-                                                <label className="block text-sm font-bold text-slate-700">Nome do Assinante (imobiliÃ¡ria)</label>
+                                                <label className="block text-sm font-bold text-slate-700">Nome do Assinante (imobiliária)</label>
                                                 <input
                                                     type="text"
                                                     name="agencyStampName"
                                                     value={localSettings.agencyStampName || ''}
                                                     onChange={handleChange}
                                                     className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
-                                                    placeholder="Ex: Nome do ResponsÃ¡vel ou RazÃ£o Social"
+                                                    placeholder="Ex: Nome do Responsável ou Razão Social"
                                                 />
-                                                <p className="text-xs text-slate-400">Este nome aparecerÃ¡ na linha de assinatura da imobiliÃ¡ria nos contratos.</p>
+                                                <p className="text-xs text-slate-400">Este nome aparecerá na linha de assinatura da imobiliária nos contratos.</p>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                             <span className="material-symbols-outlined text-orange-500 text-3xl">description</span>
                                             Modelos de Contrato
@@ -663,9 +675,9 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                     <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100 text-amber-800 text-sm leading-relaxed">
                                         <p className="font-bold mb-2 flex items-center gap-2">
                                             <span className="material-symbols-outlined text-sm">info</span>
-                                            Tags DisponÃ­veis
+                                            Tags Disponíveis
                                         </p>
-                                        Use estas tags para preenchimento automÃ¡tico:
+                                        Use estas tags para preenchimento automático:
                                         <div className="flex flex-wrap gap-2 mt-3">
                                             {['{{OWNER_NAME}}', '{{OWNER_DOC}}', '{{CLIENT_NAME}}', '{{CLIENT_DOC}}', '{{PROPERTY_ADDR}}', '{{VALUE}}', '{{START_DATE}}', '{{END_DATE}}', '{{DUE_DAY}}'].map(tag => (
                                                 <code key={tag} className="bg-white/60 px-2 py-1 rounded text-orange-700 font-mono text-[10px]">{tag}</code>
@@ -719,15 +731,15 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                     </div>
                                 </div>
 
-                                {/* ClÃ¡usulas Legais Adicionais */}
+                                {/* Cláusulas Legais Adicionais */}
                                 <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-3xl border border-amber-200 space-y-4">
                                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                         <span className="material-symbols-outlined text-amber-600">gavel</span>
-                                        ClÃ¡usulas Legais Adicionais
+                                        Cláusulas Legais Adicionais
                                     </h3>
                                     <p className="text-sm text-slate-600">
-                                        InformaÃ§Ãµes, leis, decretos ou clÃ¡usulas personalizadas que serÃ£o anexadas ao final de TODOS os contratos gerados.
-                                        Use este espaÃ§o para incluir referÃªncias legais, polÃ­ticas da empresa, bases legais (LGPD), entre outros.
+                                        Informações, leis, decretos ou cláusulas personalizadas que serão anexadas ao final de TODOS os contratos gerados.
+                                        Use este espaço para incluir referências legais, políticas da empresa, bases legais (LGPD), entre outros.
                                     </p>
                                     <textarea
                                         name="contractLegalClauses"
@@ -737,13 +749,13 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                         className="w-full p-5 rounded-2xl border border-amber-200 bg-white font-mono text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500/20 resize-y"
                                         placeholder={`Exemplo:
 
-CLÃUSULA ADICIONAL - DA PROTEÃ‡ÃƒO DE DADOS (LGPD)
+CLÁUSULA ADICIONAL - DA PROTEÇÃO DE DADOS (LGPD)
 
-As partes declaram estar cientes e de acordo com a Lei nÂº 13.709/2018 (LGPD), comprometendo-se a tratar os dados pessoais compartilhados exclusivamente para as finalidades deste contrato, adotando medidas de seguranÃ§a tÃ©cnicas e administrativas para proteÃ§Ã£o dos dados.
+As partes declaram estar cientes e de acordo com a Lei nº 13.709/2018 (LGPD), comprometendo-se a tratar os dados pessoais compartilhados exclusivamente para as finalidades deste contrato, adotando medidas de segurança técnicas e administrativas para proteção dos dados.
 
-CLÃUSULA ADICIONAL - DO CÃ“DIGO DE DEFESA DO CONSUMIDOR
+CLÁUSULA ADICIONAL - DO CÓDIGO DE DEFESA DO CONSUMIDOR
 
-Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo CÃ³digo de Defesa do Consumidor (Lei nÂº 8.078/90) quando aplicÃ¡vel.`}
+Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Código de Defesa do Consumidor (Lei nº 8.078/90) quando aplicável.`}
                                     />
                                 </div>
                             </section>
@@ -754,7 +766,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                         <span className="material-symbols-outlined text-violet-500 text-3xl">smart_toy</span>
-                                        CÃ©rebro Artificial (AI)
+                                        Cérebro Artificial (AI)
                                     </h2>
 
                                     <div className="space-y-4">
@@ -766,23 +778,23 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                             className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-violet-100 focus:border-violet-500 outline-none appearance-none bg-no-repeat bg-[right_1.5rem_center] bg-[length:1.5rem_1.5rem]"
                                             style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='Length: 19 9l-7 7-7-7' /%3E%3C/svg%3E")` }}
                                         >
-                                            <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (RÃ¡pido & EstÃ¡vel)</option>
-                                            <option value="gemini-1.5-pro">Google Gemini 1.5 Pro (Criativo & RaciocÃ­nio)</option>
+                                            <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (Rápido & Estável)</option>
+                                            <option value="gemini-1.5-pro">Google Gemini 1.5 Pro (Criativo & Raciocínio)</option>
                                             <option value="gpt-4o">OpenAI GPT-4o (Premium)</option>
                                         </select>
                                     </div>
 
                                     <div className="space-y-4">
-                                        <label className="block text-sm font-bold text-slate-700">InstruÃ§Ãµes de Personalidade (System Prompt)</label>
+                                        <label className="block text-sm font-bold text-slate-700">Instruções de Personalidade (System Prompt)</label>
                                         <textarea 
                                             name="aiPromptBase"
                                             value={localSettings.aiPromptBase}
                                             onChange={handleChange}
                                             rows={8}
                                             className="w-full px-5 py-4 rounded-3xl border border-slate-200 focus:ring-4 focus:ring-violet-100 focus:border-violet-500 outline-none resize-none text-slate-600"
-                                            placeholder="Ex: VocÃª Ã© um assistente que foca em imÃ³veis de alto luxo..."
+                                            placeholder="Ex: Você é um assistente que foca em imóveis de alto luxo..."
                                         />
-                                        <p className="text-xs text-slate-400 italic">Isso define como a IA conversarÃ¡ com seus clientes e corretores.</p>
+                                        <p className="text-xs text-slate-400 italic">Isso define como a IA conversará com seus clientes e corretores.</p>
                                     </div>
                                 </div>
                             </section>
@@ -793,7 +805,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                         <span className="material-symbols-outlined text-emerald-500 text-3xl">payments</span>
-                                        ConfiguraÃ§Ãµes Financeiras
+                                        Configurações Financeiras
                                     </h2>
                                     
                                     <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 flex items-center gap-4">
@@ -802,13 +814,13 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                         </div>
                                         <div>
                                             <p className="text-sm font-bold text-emerald-900">Recebimentos via PIX</p>
-                                            <p className="text-xs text-emerald-700">Estas informaÃ§Ãµes serÃ£o enviadas automaticamente para os clientes nas cobranÃ§as.</p>
+                                            <p className="text-xs text-emerald-700">Estas informações serão enviadas automaticamente para os clientes nas cobranças.</p>
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">Chave PIX (E-mail, CPF, CNPJ ou AleatÃ³ria)</label>
+                                            <label className="block text-sm font-bold text-slate-700">Chave PIX (E-mail, CPF, CNPJ ou Aleatória)</label>
                                             <input 
                                                 type="text" 
                                                 name="pixKey"
@@ -820,14 +832,14 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                         </div>
                                         
                                         <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">BeneficiÃ¡rio (Nome Completo)</label>
+                                            <label className="block text-sm font-bold text-slate-700">Beneficiário (Nome Completo)</label>
                                             <input 
                                                 type="text" 
                                                 name="pixBeneficiary"
                                                 value={localSettings.pixBeneficiary}
                                                 onChange={handleChange}
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all"
-                                                placeholder="ex: JoÃ£o da Silva ImÃ³veis Ltda"
+                                                placeholder="ex: João da Silva Imóveis Ltda"
                                             />
                                         </div>
                                     </div>
@@ -840,23 +852,23 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                 <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
                                     <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                         <span className="material-symbols-outlined text-primary text-3xl">campaign</span>
-                                        Broadcaster de AnÃºncios
+                                        Broadcaster de Anúncios
                                     </h2>
                                     
                                     <p className="text-slate-500 text-sm">
-                                        Envie uma notificaÃ§Ã£o push em tempo real para <strong>todos os dispositivos</strong> que aceitaram receber notificaÃ§Ãµes.
-                                        Use com moderaÃ§Ã£o para anÃºncios de novos imÃ³veis ou comunicados importantes.
+                                        Envie uma notificação push em tempo real para <strong>todos os dispositivos</strong> que aceitaram receber notificações.
+                                        Use com moderação para anúncios de novos imóveis ou comunicados importantes.
                                     </p>
 
                                     <div className="space-y-6 bg-slate-50 p-8 rounded-3xl border border-slate-200">
                                         <div className="space-y-4">
-                                            <label className="block text-sm font-bold text-slate-700">TÃ­tulo do AnÃºncio</label>
+                                            <label className="block text-sm font-bold text-slate-700">Título do Anúncio</label>
                                             <input 
                                                 type="text" 
                                                 value={broadcastMessage.title}
                                                 onChange={(e) => setBroadcastMessage({...broadcastMessage, title: e.target.value})}
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
-                                                placeholder="Ex: ðŸ”¥ Grande Oportunidade no Jardins!"
+                                                placeholder="Ex: 🔥 Grande Oportunidade no Jardins!"
                                             />
                                         </div>
                                         
@@ -866,7 +878,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                 value={broadcastMessage.body}
                                                 onChange={(e) => setBroadcastMessage({...broadcastMessage, body: e.target.value})}
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all min-h-[100px]"
-                                                placeholder="Ex: Apartamento com 3 quartos e vista livre por um preÃ§o imperdÃ­vel. Confira!"
+                                                placeholder="Ex: Apartamento com 3 quartos e vista livre por um preço imperdível. Confira!"
                                             />
                                         </div>
 
@@ -905,17 +917,17 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                     <div className="flex items-center justify-between">
                                         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                             <span className="material-symbols-outlined text-amber-500 text-3xl">mail</span>
-                                            ConfiguraÃ§Ãµes de E-mail (SMTP)
+                                            Configurações de E-mail (SMTP)
                                         </h2>
                                         <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-bold uppercase tracking-wider border border-amber-100">
-                                            Por ImobiliÃ¡ria
+                                            Por Imobiliária
                                         </span>
                                     </div>
                                     <p className="text-slate-500 text-sm">
-                                        Configure o servidor SMTP da sua imobiliÃ¡ria. 
-                                        Os e-mails serÃ£o enviados usando estas credenciais.
-                                        {companySettings?.smtp_host && <span className="text-emerald-600 font-bold"> âœ… SMTP configurado</span>}
-                                        {!companySettings?.smtp_host && <span className="text-amber-600 font-bold"> âš ï¸ Usando SMTP global (ENV)</span>}
+                                        Configure o servidor SMTP da sua imobiliária. 
+                                        Os e-mails serão enviados usando estas credenciais.
+                                        {companySettings?.smtp_host && <span className="text-emerald-600 font-bold"> ✅ SMTP configurado</span>}
+                                        {!companySettings?.smtp_host && <span className="text-amber-600 font-bold"> ⚠️ Usando SMTP global (ENV)</span>}
                                     </p>
 
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -932,7 +944,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                 placeholder="587" />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">UsuÃ¡rio SMTP *</label>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Usuário SMTP *</label>
                                             <input value={localSettings.smtp_user} onChange={e => setLocalSettings(p => ({ ...p, smtp_user: e.target.value }))}
                                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
                                                 placeholder="contato@imobiliaria.com" />
@@ -941,7 +953,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Senha SMTP *</label>
                                             <input type="password" value={localSettings.smtp_password} onChange={e => setLocalSettings(p => ({ ...p, smtp_password: e.target.value }))}
                                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
-                                                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" />
+                                                placeholder="⬢⬢⬢⬢⬢⬢⬢⬢" />
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <label className="relative inline-flex items-center cursor-pointer">
@@ -949,7 +961,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                     className="sr-only peer" />
                                                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                                             </label>
-                                            <span className="text-sm text-slate-600 font-medium">ConexÃ£o Segura (TLS/SSL)</span>
+                                            <span className="text-sm text-slate-600 font-medium">Conexão Segura (TLS/SSL)</span>
                                         </div>
                                     </div>
 
@@ -960,7 +972,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nome do Remetente</label>
                                                 <input value={localSettings.email_sender_name} onChange={e => setLocalSettings(p => ({ ...p, email_sender_name: e.target.value }))}
                                                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
-                                                    placeholder="ImobiliÃ¡ria Alpha" />
+                                                    placeholder="Imobiliária Alpha" />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">E-mail do Remetente</label>
@@ -973,13 +985,13 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
 
                                     <div className="border-t border-slate-100 pt-6">
                                         <h3 className="text-lg font-bold text-slate-800 mb-4">Testar Envio</h3>
-                                        <p className="text-sm text-slate-500 mb-4">Envie um e-mail de teste para verificar se as configuraÃ§Ãµes SMTP estÃ£o corretas.</p>
-                                        <div className="flex items-center gap-3">
+                                        <p className="text-sm text-slate-500 mb-4">Envie um e-mail de teste para verificar se as configurações SMTP estão corretas.</p>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                             <input value={testEmail} onChange={e => setTestEmail(e.target.value)}
-                                                className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
+                                                className="w-full sm:flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
                                                 placeholder="seu@email.com" />
                                             <button onClick={handleTestEmail} disabled={isTestingEmail || !testEmail}
-                                                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all flex items-center gap-2">
+                                                className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2">
                                                 {isTestingEmail ? <span className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Testar'}
                                             </button>
                                         </div>
@@ -990,13 +1002,13 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
 
                         {activeTab === 'sync' && (
                             <section className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
-                                    <div className="flex items-center justify-between">
+                                <div className="bg-white p-4 md:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6 md:space-y-8">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                         <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                                             <span className="material-symbols-outlined text-blue-500 text-3xl">hub</span>
                                             Conectividade & Push
                                         </h2>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
                                                 onClick={handleProvisionTestData}
@@ -1031,7 +1043,7 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
 
                                             <div>
                                                 <h3 className="font-bold text-blue-900 text-lg">Web Push Notifications</h3>
-                                                <p className="text-xs text-blue-700/70 leading-relaxed">Alertas nativos em tempo real para novos imÃ³veis, leads e mensagens de chat.</p>
+                                                <p className="text-xs text-blue-700/70 leading-relaxed">Alertas nativos em tempo real para novos imóveis, leads e mensagens de chat.</p>
                                             </div>
 
                                             <div className="space-y-3 pt-2">
@@ -1044,19 +1056,19 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                     Ativar no Navegador
                                                 </button>
 
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-col sm:flex-row gap-2">
                                                     <input 
                                                         type="text" 
                                                         value={testPushMessage}
                                                         onChange={(e) => setTestPushMessage(e.target.value)}
-                                                        className="flex-1 px-4 py-2 rounded-xl border border-blue-200 bg-white/50 focus:outline-none text-sm"
+                                                        className="w-full sm:flex-1 px-4 py-2 rounded-xl border border-blue-200 bg-white/50 focus:outline-none text-sm"
                                                         placeholder="Mensagem de teste..."
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={handleTestPush}
                                                         disabled={isTestingPush}
-                                                        className="px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all disabled:opacity-50"
+                                                        className="w-full sm:w-auto px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all disabled:opacity-50"
                                                     >
                                                         {isTestingPush ? '...' : 'Testar'}
                                                     </button>
@@ -1073,31 +1085,31 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                             </div>
 
                                             <div>
-                                                <h3 className="font-bold text-slate-800 text-lg">ServiÃ§o de E-mail (SMTP)</h3>
-                                                <p className="text-xs text-slate-500 leading-relaxed">Envio automÃ¡tico de contratos em PDF e convites para assinatura digital.</p>
+                                                <h3 className="font-bold text-slate-800 text-lg">Serviço de E-mail (SMTP)</h3>
+                                                <p className="text-xs text-slate-500 leading-relaxed">Envio automático de contratos em PDF e convites para assinatura digital.</p>
                                             </div>
 
                                             <div className="space-y-4 pt-2">
-                                                <div className="flex gap-2">
+                                                <div className="flex flex-col sm:flex-row gap-2">
                                                     <input 
                                                         type="email" 
                                                         value={testEmail}
                                                         onChange={(e) => setTestEmail(e.target.value)}
-                                                        className="flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none text-sm"
+                                                        className="w-full sm:flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none text-sm"
                                                         placeholder="Seu e-mail de teste"
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={handleTestEmail}
                                                         disabled={isTestingEmail}
-                                                        className="px-5 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-900 transition-all disabled:opacity-50 shadow-lg shadow-slate-200"
+                                                        className="w-full sm:w-auto px-5 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-900 transition-all disabled:opacity-50 shadow-lg shadow-slate-200"
                                                     >
                                                         {isTestingEmail ? '...' : 'Enviar'}
                                                     </button>
                                                 </div>
                                                 <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-100">
                                                     <span className="material-symbols-outlined text-amber-500 text-sm">lock</span>
-                                                    <p className="text-[10px] text-amber-700 font-medium">Credenciais protegidas via variÃ¡veis de ambiente (.env).</p>
+                                                    <p className="text-[10px] text-amber-700 font-medium">Credenciais protegidas via variáveis de ambiente (.env).</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -1112,8 +1124,8 @@ Fica ressalvado que as relaÃ§Ãµes contratuais regem-se subsidiariamente pelo
                                                 <span className="material-symbols-outlined text-5xl">install_mobile</span>
                                             </div>
                                             <div>
-                                                <h3 className="text-2xl font-black">App Nativo InstalÃ¡vel</h3>
-                                                <p className="text-indigo-100 text-sm max-w-sm">Sua imobiliÃ¡ria no bolso do cliente. Instale na tela inicial para acesso instantÃ¢neo e offline.</p>
+                                                <h3 className="text-2xl font-black">App Nativo Instalável</h3>
+                                                <p className="text-indigo-100 text-sm max-w-sm">Sua imobiliária no bolso do cliente. Instale na tela inicial para acesso instantâneo e offline.</p>
                                             </div>
                                         </div>
                                         

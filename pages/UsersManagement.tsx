@@ -3,10 +3,10 @@ import { User } from '../src/types';
 
 interface UsersManagementProps {
     users: User[];
-    onUpdateUser?: (id: string | number, data: Partial<User>) => Promise<boolean>;
-    onAddUser?: (data: Omit<User, 'id'> & { password?: string }) => Promise<boolean>;
-    onDeleteUser?: (id: string | number) => Promise<boolean>;
-    onSendCredentials?: (user: User, password: string) => Promise<boolean>;
+    onUpdateUser: (id: string | number, data: Partial<User>) => Promise<boolean>;
+    onAddUser: (data: Omit<User, 'id'> & { password: string }) => Promise<boolean>;
+    onDeleteUser: (id: string | number) => Promise<boolean>;
+    onSendCredentials: (user: User, password: string) => Promise<boolean>;
 }
 
 type RoleOption = 'all' | 'admin' | 'owner' | 'client' | 'visitor';
@@ -190,7 +190,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
                 </div>
             )}
 
-            <div className="p-6 pb-2">
+            <div className="p-4 md:p-6 md:pb-2">
                 <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white dark:bg-[#1a1d23] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <div className="relative w-full md:w-96">
                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
@@ -207,8 +207,8 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
                             <button
                                 key={role}
                                 onClick={() => setRoleFilter(role)}
-                                className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${roleFilter === role
-                                    ? 'bg-slate-900 dark:bg-primary text-white border-slate-900 dark:border-primary'
+                                className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-colors border ${roleFilter === role ?
+                                     'bg-slate-900 dark:bg-primary text-white border-slate-900 dark:border-primary'
                                     : 'bg-white dark:bg-[#1a1d23] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50'
                                 }`}
                             >
@@ -219,9 +219,45 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 pt-4">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 pt-4">
                 <div className="bg-white dark:bg-[#1a1d23] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                    <table className="w-full text-left border-collapse">
+                    <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredUsers.map(user => (
+                            <div key={user.id} className="p-4 space-y-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="size-11 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold overflow-hidden shrink-0">
+                                        {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : user.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-bold text-slate-900 dark:text-white break-words">{user.name}</p>
+                                        <p className="text-xs text-slate-500 break-all">{user.email}</p>
+                                        <p className="text-xs text-slate-500 mt-1">{user.phone || 'Sem telefone'}</p>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-1 rounded-md text-[10px] font-bold border ${getRoleColor(user.role)}`}>
+                                        {getRoleLabel(user.role).toUpperCase()}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={() => openEdit(user)} className="py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1">
+                                        <span className="material-symbols-outlined text-[16px]">edit</span> Editar
+                                    </button>
+                                    <button onClick={() => handleResendCredentials(user)} className="py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold flex items-center justify-center gap-1">
+                                        <span className="material-symbols-outlined text-[16px]">mail</span> Enviar
+                                    </button>
+                                    <button onClick={() => setShowDeleteConfirm(String(user.id))} className="py-2 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold flex items-center justify-center gap-1">
+                                        <span className="material-symbols-outlined text-[16px]">delete</span> Excluir
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {filteredUsers.length === 0 && (
+                            <div className="p-12 text-center text-slate-400">
+                                <span className="material-symbols-outlined text-4xl mb-2 block">person_off</span>
+                                Nenhum usuário encontrado.
+                            </div>
+                        )}
+                    </div>
+                    <table className="hidden md:table w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50 dark:bg-[#111318] border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 uppercase">
                                 <th className="p-4 font-bold">Usuário</th>
@@ -299,7 +335,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
             {/* ADD MODAL */}
             {showAddModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowAddModal(false)}>
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-4 md:p-6 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold dark:text-white flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">person_add</span>
@@ -385,7 +421,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
             {/* EDIT MODAL */}
             {showEditModal && editingUser && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowEditModal(false)}>
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-lg p-4 md:p-6 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold dark:text-white flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">edit</span>
@@ -473,7 +509,7 @@ const UsersManagement: React.FC<UsersManagementProps> = ({ users, onUpdateUser, 
                             <div className="size-16 mx-auto mb-4 rounded-full bg-rose-100 dark:bg-rose-500/10 flex items-center justify-center">
                                 <span className="material-symbols-outlined text-3xl text-rose-500">warning</span>
                             </div>
-                            <h3 className="text-lg font-bold dark:text-white mb-2">Excluir Usuário?</h3>
+                            <h3 className="text-lg font-bold dark:text-white mb-2">Excluir Usuário</h3>
                             <p className="text-sm text-slate-500 mb-6">
                                 Esta ação não pode ser desfeita. Todos os dados deste usuário serão permanentemente removidos.
                             </p>

@@ -7,7 +7,7 @@ import { toPng } from 'html-to-image';
 
 interface MarketingStudioProps {
     properties: Property[];
-    currentUser?: User | null;
+    currentUser: User | null;
 }
 
 const PLATFORMS = [
@@ -90,6 +90,17 @@ const hexToRgba = (hex: string, alpha: number) => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const waitForImages = async (root: HTMLElement) => {
+    const images = Array.from(root.querySelectorAll('img'));
+    await Promise.all(images.map(img => {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>(resolve => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+        });
+    }));
+};
+
 const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUser }) => {
     const [selectedPropertyId, setSelectedPropertyId] = useState('');
     const [platform, setPlatform] = useState<'instagram' | 'whatsapp' | 'facebook' | 'tiktok'>('instagram');
@@ -169,10 +180,10 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
     const currentTemplate = TEMPLATES.find(t => t.id === template) || TEMPLATES[0];
 
     useEffect(() => {
-        if (currentUser?.id) {
+        if (currentUser.id) {
             getMarketingCampaigns(String(currentUser.id)).then(setCampaignHistory).catch(() => {});
         }
-    }, [currentUser?.id]);
+    }, [currentUser.id]);
 
     useEffect(() => {
         if (selectedProperty) {
@@ -203,13 +214,17 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
         if (!artboardRef.current) return;
         setIsDownloading(true);
         try {
+            await document.fonts.ready.catch(() => undefined);
+            await waitForImages(artboardRef.current);
             const dataUrl = await toPng(artboardRef.current, {
                 quality: 1.0,
-                pixelRatio: 2, // Retira qualidade alta (retina)
-                cacheBust: true, // Força não usar cache se tiver problema de CORS
+                pixelRatio: 2,
+                cacheBust: true,
+                backgroundColor: '#0f172a',
+                imagePlaceholder: displayImage,
             });
             const link = document.createElement('a');
-            link.download = `campanha-${selectedProperty?.title || 'flowe'}.png`;
+            link.download = `campanha-${selectedProperty.title || 'flowe'}.png`;
             link.href = dataUrl;
             link.click();
         } catch (e) {
@@ -221,17 +236,21 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
     };
 
     const handleSave = async () => {
-        if (!generatedCaption || !selectedProperty || !currentUser?.id) return;
+        if (!generatedCaption || !selectedProperty || !currentUser.id) return;
         setIsSaving(true);
         
         let finalImageUrl = displayImage;
         
         try {
             if (artboardRef.current) {
+                await document.fonts.ready.catch(() => undefined);
+                await waitForImages(artboardRef.current);
                 finalImageUrl = await toPng(artboardRef.current, {
                     quality: 0.95,
                     pixelRatio: 2,
                     cacheBust: true,
+                    backgroundColor: '#0f172a',
+                    imagePlaceholder: displayImage,
                 });
             }
             await saveMarketingCampaign({
@@ -425,8 +444,8 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
         <div className="bg-[#fcfcfd] dark:bg-[#08090d] min-h-full flex flex-col font-sans overflow-hidden">
             
             {/* TOP HEADER */}
-            <header className="flex-none p-6 md:px-10 border-b border-slate-200 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-xl sticky top-0 z-50">
-                <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <header className="flex-none p-4 md:p-6 md:px-10 border-b border-slate-200 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-xl sticky top-0 z-50">
+                <div className="max-w-[1800px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
                     <div className="flex items-center gap-4">
                         <div className="size-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg">
                             <span className="material-symbols-outlined text-white text-[28px]">design_services</span>
@@ -437,10 +456,10 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10">
+                    <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 overflow-x-auto w-full md:w-auto">
                         {(['setup', 'editor', 'history'] as const).map(tab => (
                             <button key={tab} onClick={() => setActiveTab(tab)}
-                                className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${activeTab === tab ? 'bg-white dark:bg-white/10 shadow-md text-primary dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                                className={`shrink-0 px-4 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-black transition-all flex items-center gap-2 ${activeTab === tab ? 'bg-white dark:bg-white/10 shadow-md text-primary dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                                 <span className="material-symbols-outlined text-[18px]">
                                     {tab === 'setup' ? 'photo_library' : tab === 'editor' ? 'tune' : 'history'}
                                 </span>
@@ -451,13 +470,13 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 md:p-10 custom-scrollbar">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-10 custom-scrollbar">
                 <div className="max-w-[1800px] mx-auto">
                     
                     {activeTab === 'setup' && (
                         <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-                            
-                            <section className="glass-panel rounded-3xl p-8 shadow-xl">
+
+                            <section className="glass-panel rounded-3xl p-4 md:p-8 shadow-xl">
                                 <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase mb-6 flex items-center gap-2">
                                     <span className="material-symbols-outlined text-primary">real_estate_agent</span> 
                                     Selecione o Imóvel para a Campanha
@@ -471,7 +490,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                                 {selectedProperty && propertyImages.length > 0 && (
                                     <div className="mt-8">
                                         <p className="text-xs font-black text-slate-500 uppercase mb-4">Escolha a Foto de Fundo (Background)</p>
-                                        <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+                                    <div className="grid grid-cols-2 xs:grid-cols-3 md:grid-cols-5 gap-3 md:gap-4">
                                             {propertyImages.slice(0, 5).map((img, i) => (
                                                 <button key={i} onClick={() => setSelectedImageIndex(i)}
                                                     className={`relative aspect-square rounded-2xl overflow-hidden transition-all ${selectedImageIndex === i ? 'ring-4 ring-primary shadow-lg scale-105' : 'opacity-60 hover:opacity-100'}`}>
@@ -494,14 +513,14 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                     )}
 
                     {activeTab === 'editor' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 h-full animate-in fade-in duration-500">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 h-full animate-in fade-in duration-500">
                             
                             {/* EDITOR CONTROLS */}
-                            <div className="lg:col-span-7 space-y-6 overflow-y-auto pr-4 pb-20 custom-scrollbar h-[calc(100vh-140px)]">
-                                
+                            <div className="lg:col-span-7 space-y-6 lg:overflow-y-auto lg:pr-4 pb-20 custom-scrollbar lg:h-[calc(100vh-140px)] min-w-0">
+
                                 <div className="glass-panel rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/5">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">1. Estilo Visual (Template)</h3>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {TEMPLATES.map(t => (
                                             <button key={t.id} onClick={() => setTemplate(t.id)}
                                                 className={`p-4 rounded-xl border-2 text-left transition-all ${template === t.id ? 'border-primary bg-primary/5 ring-2 ring-primary' : 'border-slate-100 dark:border-white/10 hover:border-slate-300'}`}>
@@ -514,7 +533,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
 
                                 <div className="glass-panel rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/5">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">2. Transparência do Card</h3>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {OPACITIES.map(o => (
                                             <button key={o.value} onClick={() => { updateEditor('cardOpacity', o.value); updateEditor('cardBlur', o.blur); }}
                                                 className={`py-3 px-4 rounded-xl border-2 text-xs font-bold transition-all ${editorState.cardOpacity === o.value ? 'border-primary bg-primary/5 text-primary ring-2 ring-primary' : 'border-slate-100 dark:border-white/10 text-slate-600 dark:text-slate-300'}`}>
@@ -532,7 +551,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
 
                                 <div className="glass-panel rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/5 space-y-4">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">3. Textos Principais</h3>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Badge (Ex: Venda, Oportunidade)</label>
                                             <input type="text" value={editorState.badgeText} onChange={e => updateEditor('badgeText', e.target.value)} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
@@ -546,7 +565,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                                         <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Título Principal</label>
                                         <input type="text" value={editorState.title} onChange={e => updateEditor('title', e.target.value)} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Subtítulo</label>
                                             <input type="text" value={editorState.subtitle} onChange={e => updateEditor('subtitle', e.target.value)} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
@@ -561,7 +580,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                                 <div className="glass-panel rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-white/5">
                                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">4. Características (Ícones)</h3>
                                     {[1, 2, 3].map(num => (
-                                        <div key={num} className="grid grid-cols-3 gap-2 mb-3">
+                                        <div key={num} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
                                             <select value={editorState[`feature${num}Icon` as keyof typeof editorState]} onChange={e => updateEditor(`feature${num}Icon` as any, e.target.value)} className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white outline-none">
                                                 {ICONS.map(i => <option key={i.value} value={i.value}>{i.label}</option>)}
                                             </select>
@@ -577,7 +596,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                                         <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Texto do Botão (CTA)</label>
                                         <input type="text" value={editorState.ctaText} onChange={e => updateEditor('ctaText', e.target.value)} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4 mt-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                                         <div>
                                             <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Cor de Fundo do Botão/Badge</label>
                                             <select value={editorState.badgeBgHex} onChange={e => { handleColorChange('badge', e.target.value); handleColorChange('cta', e.target.value); }} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none">
@@ -607,7 +626,7 @@ const MarketingStudio: React.FC<MarketingStudioProps> = ({ properties, currentUs
                             </div>
 
                             {/* PREVIEW DISPLAY */}
-                            <div className="lg:col-span-5 flex justify-center sticky top-0">
+                            <div className="lg:col-span-5 flex justify-center lg:sticky lg:top-0 min-w-0">
                                 <div className="flex flex-col items-center gap-6 w-full">
                                     <div className="flex items-center justify-between w-full max-w-[360px] px-2">
                                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Preview em Tempo Real</h3>
