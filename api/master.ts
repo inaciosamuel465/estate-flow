@@ -1,11 +1,151 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { signToken, verifyRequest } from './_lib/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
+  const route = String(req.query.route || '');
   const dbUrl = process.env.VITE_DATABASE_URL;
+
+  // POST /api/email/send routed here to keep Hobby deployments under the function limit.
+  if ((path === '/api/email/send' || route === 'email-send') && req.method === 'POST') {
+    const user = verifyRequest(req);
+    if (!user) return res.status(401).json({ error: 'Nao autorizado' });
+
+    const { to, subject, text, html, company_id, from: customFrom } = req.body;
+    if (!to || !subject || !html) return res.status(400).json({ error: 'Missing parameters' });
+    if (company_id && user.company_id && company_id !== user.company_id && !['master', 'superadmin'].includes(user.role)) {
+      return res.status(403).json({ error: 'Tenant invalido' });
+    }
+
+    let smtpConfig: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      pass: string;
+      senderName: string;
+      senderEmail: string;
+    } | null = null;
+
+    if (company_id && dbUrl) {
+      try {
+        const sql = neon(dbUrl);
+        const settings = await sql`SELECT * FROM company_settings WHERE company_id = ${company_id} LIMIT 1`;
+        const s = settings[0];
+        if (s?.smtp_host && s?.smtp_user && s?.smtp_password) {
+          smtpConfig = {
+            host: s.smtp_host,
+            port: Number(s.smtp_port) || 587,
+            secure: s.smtp_secure === true,
+            user: s.smtp_user,
+            pass: s.smtp_password,
+            senderName: s.email_sender_name || 'EstateFlow',
+            senderEmail: s.email_sender_address || s.smtp_user,
+          };
+        }
+      } catch (error) {
+        console.warn('Failed to load company SMTP, using fallback:', error);
+      }
+    }
+
+    const config = smtpConfig || {
+      host: process.env.SMTP_HOST || '',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',
+      senderName: 'EstateFlow Suite',
+      senderEmail: process.env.SMTP_USER || '',
+    };
+
+    if (!config.host || !config.user || !config.pass) {
+      return res.status(500).json({ error: 'SMTP nao configurado' });
+    }
+
+    try {
+      const safeFrom = typeof customFrom === 'string' && customFrom.toLowerCase() === config.senderEmail.toLowerCase()
+        ? customFrom
+        : config.senderEmail;
+      const info = await nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: { user: config.user, pass: config.pass },
+        tls: { rejectUnauthorized: false },
+      }).sendMail({
+        from: `"${config.senderName}" <${safeFrom}>`,
+        to,
+        subject,
+        text: text || undefined,
+        html,
+        headers: {
+          'Message-ID': `<${Date.now()}.${Math.random().toString(36).substr(2)}@estateflow>`,
+          'References': '',
+          'In-Reply-To': '',
+        },
+      });
+      return res.status(200).json({ success: true, messageId: info.messageId });
+    } catch (error) {
+      console.error('Error sending email:', error);
+      return res.status(500).json({ error: 'Failed to send email' });
+    }
+  }
+
+  // POST /api/admin/provision routed here to avoid an extra Serverless Function.
+  if ((path === '/api/admin/provision' || route === 'admin-provision') && req.method === 'POST') {
+    const user = verifyRequest(req);
+    if (!user) return res.status(401).json({ error: 'Nao autorizado' });
+    if (user.role !== 'admin' && user.role !== 'master' && user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Sem permissao' });
+    }
+    const companyId = String(req.body?.company_id || user.company_id || '');
+    if (!companyId) return res.status(400).json({ error: 'company_id obrigatorio' });
+    if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
+
+    try {
+      const sql = neon(dbUrl);
+      const provisionUsers = [
+        { email: 'admin@estateflow.com', name: 'Administrador', role: 'admin', password: 'admin' },
+        { email: 'cliente@teste.com', name: 'Joao Cliente', role: 'client', password: 'user123' },
+        { email: 'proprietario@teste.com', name: 'Maria Proprietaria', role: 'owner', password: 'user123' },
+      ];
+
+      for (const provisionUser of provisionUsers) {
+        const id = `${companyId}_${provisionUser.email.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        const passwordHash = crypto.createHash('sha256').update(provisionUser.password).digest('hex');
+        await sql`
+          INSERT INTO users (id, email, name, role, password, company_id)
+          VALUES (${id}, ${provisionUser.email}, ${provisionUser.name}, ${provisionUser.role}, ${passwordHash}, ${companyId})
+          ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            role = EXCLUDED.role,
+            password = COALESCE(users.password, EXCLUDED.password),
+            company_id = EXCLUDED.company_id
+        `;
+      }
+
+      const settings = [
+        { key: 'pixKey', value: 'financeiro@estateflow.com' },
+        { key: 'pixBeneficiary', value: 'EstateFlow LTDA' },
+      ];
+
+      for (const item of settings) {
+        await sql`
+          INSERT INTO system_settings (key, value)
+          VALUES (${`${companyId}:${item.key}`}, ${item.value})
+          ON CONFLICT (key) DO NOTHING
+        `;
+      }
+
+      return res.status(200).json({ success: true, message: 'Test data provisioned' });
+    } catch (error) {
+      console.error('Error provisioning:', error);
+      return res.status(500).json({ error: 'Failed to provision' });
+    }
+  }
 
   // POST /api/master/login
   if (path === '/api/master/login' && req.method === 'POST') {

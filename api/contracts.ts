@@ -118,10 +118,11 @@ function safeDomain(email: string) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const path = new URL(req.url || '', 'http://localhost').pathname;
+    const action = String(req.query.action || '');
     const sql = getSql();
     await ensureContractSchema(sql);
 
-    if (path === '/api/contracts/public' && req.method === 'GET') {
+    if ((path === '/api/contracts/public' || action === 'public') && req.method === 'GET') {
       const tenant = String(req.query.tenant || '').trim();
       const id = String(req.query.id || '').trim();
       const token = String(req.query.token || '').trim();
@@ -234,7 +235,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    if (path === '/api/contracts/public-sign' && req.method === 'POST') {
+    if ((path === '/api/contracts/public-sign' || action === 'public-sign') && req.method === 'POST') {
       const { tenant, contract_id, token, signature_image } = req.body || {};
       if (!tenant || !contract_id || !token || !signature_image) {
         return fail(res, 400, 'tenant, contract_id, token e signature_image sao obrigatorios');
@@ -275,7 +276,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: { signed_at: new Date().toISOString() } });
     }
 
-    if (path === '/api/contracts/templates' && req.method === 'GET') {
+    if ((path === '/api/contracts/templates' || action === 'templates') && req.method === 'GET') {
       const user = requireAuth(req);
       const companyId = requireTenant(req, user);
       assertTenantAccess(user, companyId);
@@ -288,7 +289,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: templates });
     }
 
-    if (path === '/api/contracts/templates' && req.method === 'POST') {
+    if ((path === '/api/contracts/templates' || action === 'templates') && req.method === 'POST') {
       const user = requireAuth(req);
       requireRole(user, ['admin', 'master', 'superadmin']);
       const companyId = requireTenant(req, user);
@@ -313,7 +314,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: { id: templateId } });
     }
 
-    if (path === '/api/contracts/events' && req.method === 'POST') {
+    if ((path === '/api/contracts/events' || action === 'events') && req.method === 'POST') {
       const user = requireAuth(req);
       const companyId = requireTenant(req, user);
       assertTenantAccess(user, companyId);
@@ -332,7 +333,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: { id: eventId } });
     }
 
-    if (path === '/api/contracts/send-signature' && req.method === 'POST') {
+    if ((path === '/api/contracts/send-signature' || action === 'send-signature') && req.method === 'POST') {
       let user: ReturnType<typeof requireAuth> | null = null;
       try {
         user = requireAuth(req);

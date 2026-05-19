@@ -205,8 +205,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const path = new URL(req.url || '', 'http://localhost').pathname;
     const parts = path.split('/').filter(Boolean);
-    const processIdFromPath = parts[1] === 'property-processes' ? parts[2] || '' : '';
-    const isEventsPath = parts[1] === 'property-processes' && parts[3] === 'events';
+    const processIdFromPath = String(req.query.id || (parts[1] === 'property-processes' ? parts[2] || '' : ''));
+    const isEventsPath = req.query.events === '1' || (parts[1] === 'property-processes' && parts[3] === 'events');
     const sql = getSql();
     await ensureProcessSchema(sql);
 

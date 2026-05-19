@@ -53,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') return fail(res, 405, 'Method not allowed');
     const path = new URL(req.url || '', 'http://localhost').pathname;
+    const action = String(req.query.action || '');
     const sql = getSql();
     await ensureDocumentSchema(sql);
 
@@ -61,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!companyId) return fail(res, 400, 'company_id obrigatorio');
     if (user) assertTenantAccess(user, companyId);
 
-    if (path === '/api/property-documents/generate') {
+    if (path === '/api/property-documents/generate' || action === 'generate') {
       const { process_id, property_id, document_type, title, file_name, file_data, mime_type } = req.body || {};
       if (!process_id || !property_id || !document_type || !title || !file_data) {
         return fail(res, 400, 'process_id, property_id, document_type, title e file_data sao obrigatorios');
@@ -81,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: { id: documentId } }, 201);
     }
 
-    if (path === '/api/property-documents/send-email') {
+    if (path === '/api/property-documents/send-email' || action === 'send-email') {
       const { document_id, to_email, subject, message } = req.body || {};
       if (!document_id || !to_email) return fail(res, 400, 'document_id e to_email sao obrigatorios');
       const docs = await sql`

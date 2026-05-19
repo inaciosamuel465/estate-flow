@@ -77,6 +77,7 @@ async function ensureInspectionSchema(sql: ReturnType<typeof getSql>) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const path = new URL(req.url || '', 'http://localhost').pathname;
+    const action = String(req.query.action || '');
     const sql = getSql();
     await ensureInspectionSchema(sql);
 
@@ -197,7 +198,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return ok(res, { data: { id: inspectionId } });
     }
 
-    if (path === '/api/inspections/images' && req.method === 'POST') {
+    if ((path === '/api/inspections/images' || action === 'images') && req.method === 'POST') {
       const user = requireAuth(req);
       const companyId = String(req.body?.company_id || user.company_id || '');
       if (!companyId) return fail(res, 400, 'company_id obrigatorio');
