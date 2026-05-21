@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireTenant } from './_lib/http.js';
+import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireTenant } from '../server/api-lib/http.js';
 
 async function ensureLeadSchema(sql: ReturnType<typeof getSql>) {
   await sql`ALTER TABLE leads ADD COLUMN IF NOT EXISTS company_id TEXT`;

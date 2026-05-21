@@ -80,4 +80,3 @@ export function createSmtpTransport(config: SmtpConfig) {
 export function publicSmtpError() {
   return 'SMTP nao configurado. Configure o SMTP da imobiliaria ou as variaveis SMTP globais.';
 }
-

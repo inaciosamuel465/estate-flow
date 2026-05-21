@@ -24,7 +24,9 @@ export function verifyToken(token: string): Record<string, unknown> | null {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
     if (payload.exp && payload.exp < Date.now()) return null;
     return payload;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export function verifyRequest(req: { headers: Record<string, string | string[] | undefined> }): { id: string; email: string; role: string; company_id?: string } | null {
@@ -33,5 +35,10 @@ export function verifyRequest(req: { headers: Record<string, string | string[] |
   const token = String(auth).replace('Bearer ', '');
   const payload = verifyToken(token);
   if (!payload) return null;
-  return { id: payload.id as string, email: payload.email as string, role: payload.role as string, company_id: payload.company_id as string | undefined };
+  return {
+    id: payload.id as string,
+    email: payload.email as string,
+    role: payload.role as string,
+    company_id: payload.company_id as string | undefined,
+  };
 }

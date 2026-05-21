@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { assertTenantAccess, fail, getSql, handleApiError, ok, requireAuth } from './_lib/http.js';
-import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
+import { assertTenantAccess, fail, getSql, handleApiError, ok, requireAuth } from '../server/api-lib/http.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from '../server/api-lib/smtp.js';
 
 async function ensureDocumentSchema(sql: ReturnType<typeof getSql>) {
   await sql`

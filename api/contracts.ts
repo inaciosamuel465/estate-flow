@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHash, randomBytes } from 'crypto';
-import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireRole, requireTenant } from './_lib/http.js';
-import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
+import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireRole, requireTenant } from '../server/api-lib/http.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from '../server/api-lib/smtp.js';
 
 async function ensureContractSchema(sql: ReturnType<typeof getSql>) {
   await sql`ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS agency_cnpj TEXT`;

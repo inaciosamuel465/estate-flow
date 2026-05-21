@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireRole, requireTenant } from './_lib/http.js';
+import { assertTenantAccess, auditLog, fail, getSql, handleApiError, ok, requireAuth, requireRole, requireTenant } from '../server/api-lib/http.js';
 
 async function ensureBillingSchema(sql: ReturnType<typeof getSql>) {
   await sql`

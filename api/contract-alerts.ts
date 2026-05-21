@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
-import { verifyRequest } from './_lib/auth.js';
-import { assertTenantAccess, fail, getSql, handleApiError, ok } from './_lib/http.js';
-import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
+import { verifyRequest } from '../server/api-lib/auth.js';
+import { assertTenantAccess, fail, getSql, handleApiError, ok } from '../server/api-lib/http.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from '../server/api-lib/smtp.js';
 
 const ALERT_DAYS = [30, 15, 7];
 

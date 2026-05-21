@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import webpush from 'web-push';
-import { verifyRequest } from './_lib/auth';
+import { verifyRequest } from '../server/api-lib/auth.js';
 
 type PushUser = { id: string; email: string; role: string; company_id?: string };
 type PushSendResult = {

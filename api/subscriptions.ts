@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
-import { verifyRequest } from './_lib/auth.js';
+import { verifyRequest } from '../server/api-lib/auth.js';
 
 async function ensureSubscriptionSchema(sql: ReturnType<typeof neon>) {
   await sql`

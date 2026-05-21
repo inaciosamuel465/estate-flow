@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { assertTenantAccess, fail, getSql, handleApiError, ok, requireAuth } from './_lib/http.js';
+import { assertTenantAccess, fail, getSql, handleApiError, ok, requireAuth } from '../server/api-lib/http.js';
 
 async function ensureProcessSchema(sql: ReturnType<typeof getSql>) {
   await sql`

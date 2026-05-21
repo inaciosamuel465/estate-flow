@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
-import { signToken, verifyRequest } from './_lib/auth.js';
-import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/smtp.js';
+import { signToken, verifyRequest } from '../server/api-lib/auth.js';
+import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from '../server/api-lib/smtp.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
