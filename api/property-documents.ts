@@ -111,12 +111,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const senderEmail = config.senderEmail;
       const senderName = config.senderName;
       const transporter = createSmtpTransport(config);
+      const safeTitle = String(doc.title || 'documento').replace(/[<>]/g, '');
+      const safeMessage = String(message || `Segue em anexo o documento ${safeTitle}.`).replace(/\n/g, '<br/>');
       const info = await transporter.sendMail({
         from: `"${senderName.replace(/"/g, '')}" <${senderEmail}>`,
         to: String(to_email),
         subject: mailSubject,
         text: message || `Segue em anexo o documento ${doc.title}.`,
-        html: `<p>${message || `Segue em anexo o documento <strong>${doc.title}</strong>.`}</p>`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+          <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+            <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;color:#0f172a;">
+              <div style="background:#0f172a;padding:26px;text-align:center;">
+                <h1 style="color:#ffffff;font-size:22px;margin:0;">EstateFlow Suite</h1>
+                <p style="color:#cbd5e1;font-size:13px;margin:8px 0 0;">Documento imobiliario</p>
+              </div>
+              <div style="padding:28px;line-height:1.6;">
+                <h2 style="font-size:20px;margin:0 0 12px;">${safeTitle}</h2>
+                <p style="font-size:15px;color:#334155;">${safeMessage}</p>
+                <p style="font-size:13px;color:#64748b;margin-top:24px;">O arquivo segue anexado nesta mensagem.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
         attachments: [{
           filename: doc.file_name || `${doc.title}.pdf`,
           content: Buffer.from(base64Payload(String(doc.file_data || '')), 'base64'),

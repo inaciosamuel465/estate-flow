@@ -20,6 +20,14 @@ function requireCompanyId(operation = 'operação'): string {
     return companyId;
 }
 
+function addMonthsDate(dateString: string | undefined, months: number): string | null {
+    if (!dateString) return null;
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+    date.setMonth(date.getMonth() + months);
+    return date.toISOString().slice(0, 10);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PROPERTIES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -345,6 +353,9 @@ export async function getContractById(id: string): Promise<Contract | null> {
 export async function addContract(contract: Contract): Promise<string> {
     const id = Math.random().toString(36).substr(2, 12);
     const companyId = requireCompanyId('criar contrato');
+    const isRent = contract.type === 'rent';
+    const resolvedEndDate = contract.endDate || (isRent ? addMonthsDate(contract.startDate, 30) : null);
+    const resolvedInstallmentsTotal = contract.installmentsTotal ?? (isRent ? 30 : null);
     await sql`
         INSERT INTO contracts (
             id, property_id, client_id, owner_id, type, status, value,
@@ -355,10 +366,10 @@ export async function addContract(contract: Contract): Promise<string> {
             ${id}, ${contract.propertyId?.toString()}, ${contract.clientId?.toString()}, 
             ${contract.ownerId?.toString()}, ${contract.type}, ${contract.status || 'active'},
             ${Number(contract.value)}, ${Number(contract.commissionRate)}, ${Number(contract.dueDay)},
-            ${contract.startDate}, ${contract.endDate || null}, ${contract.nextPaymentStatus || 'pending'},
+            ${contract.startDate}, ${resolvedEndDate}, ${contract.nextPaymentStatus || 'pending'},
             ${contract.templateType || null}, ${contract.customContent || null},
             ${contract.signatureStatus || 'pending'},
-            ${contract.installmentsTotal || null}, ${contract.installmentsPaid || 0},
+            ${resolvedInstallmentsTotal}, ${contract.installmentsPaid || 0},
             ${companyId}
         )
     `;

@@ -7,7 +7,7 @@ import { createSmtpTransport, publicSmtpError, resolveSmtpConfig } from './_lib/
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = new URL(req.url || '', 'http://localhost').pathname;
   const route = String(req.query.route || '');
-  const dbUrl = process.env.VITE_DATABASE_URL;
+  const dbUrl = process.env.VITE_DATABASE_URL || process.env.DATABASE_URL;
 
   // POST /api/auth/login
   if ((path === '/api/auth/login' || route === 'auth-login') && req.method === 'POST') {
@@ -72,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const safeFrom = typeof customFrom === 'string' && customFrom.toLowerCase() === config.senderEmail.toLowerCase()
-         customFrom
+        ? customFrom
         : config.senderEmail;
       const info = await createSmtpTransport(config).sendMail({
         from: `"${config.senderName}" <${safeFrom}>`,
@@ -214,7 +214,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
     const sql = neon(dbUrl);
 
-    const { company_id } = req.body;
+    const { company_id, test_to } = req.body;
     if (!company_id) return res.status(400).json({ error: 'company_id required' });
 
     try {
@@ -241,7 +241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const planPrice = Number(s.plan_price) || 170;
       const appUrl = process.env.VITE_APP_URL || 'https://estate-flow-amber.vercel.app';
       const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
-      const to = admin.email || c.email;
+      const to = String(test_to || '').trim() || admin?.email || c.email;
+      if (!to) return res.status(400).json({ error: 'Empresa sem email cadastrado para recebimento.' });
       const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
       const text = `Olá ${admin.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
       const html = `
@@ -302,7 +303,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!dbUrl) return res.status(500).json({ error: 'DB not configured' });
     const sql = neon(dbUrl);
 
-    const { company_id, name, slug, subdomain, visible, subscription_status } = req.body;
+    const { company_id, name, slug, subdomain, email, phone, visible, subscription_status } = req.body;
     if (!company_id) return res.status(400).json({ error: 'company_id required' });
 
     try {
@@ -319,6 +320,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           name = COALESCE(${name || null}, name),
           slug = COALESCE(${slug || null}, slug),
           subdomain = COALESCE(${subdomain || null}, subdomain),
+          email = COALESCE(${email || null}, email),
+          phone = COALESCE(${phone || null}, phone),
           visible = COALESCE(${visible !== undefined ? visible : null}, visible),
           subscription_status = COALESCE(${subscription_status || null}, subscription_status),
           updated_at = NOW()

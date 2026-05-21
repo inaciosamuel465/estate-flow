@@ -12,6 +12,7 @@ interface NotificationContextType {
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
+const PUSH_VAPID_STORAGE_KEY = 'estateflow_push_vapid_public_key';
 
 export const useNotifications = () => {
   const ctx = useContext(NotificationContext);
@@ -19,13 +20,9 @@ export const useNotifications = () => {
   return ctx;
 };
 
-// Helper for VAPID
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
-    .replace(/_/g, '/');
-
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
   const outputArray = new Uint8Array(rawData.length);
 
@@ -43,18 +40,17 @@ interface Props {
   onMarkAllAsRead: () => Promise<void>;
 }
 
-export const NotificationProvider: React.FC<Props> = ({ 
-  children, 
-  userId, 
+export const NotificationProvider: React.FC<Props> = ({
+  children,
+  userId,
   existingNotifications,
   onMarkAsRead,
   onMarkAllAsRead
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | 'unsupported'>('default');
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
-  // Registra Service Worker Notification e Push
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setPermissionStatus('unsupported');
@@ -68,69 +64,81 @@ export const NotificationProvider: React.FC<Props> = ({
     navigator.serviceWorker.register('/sw-notifications.js', { scope: '/' })
       .then((reg) => {
         swRegistrationRef.current = reg;
-        console.log('[Native Push] Service Worker registrado para Web Push.');
+        console.log('[Native Push] Service Worker registrado para Web Push VAPID.');
       })
       .catch((err) => {
         console.warn('[Native Push] Falha ao registrar SW:', err);
       });
   }, []);
 
-  // Função core: Inscreve o dispositivo
   const subscribeToPush = useCallback(async (reg: ServiceWorkerRegistration) => {
     try {
-      // 1. Get Public Key from Server
       const res = await fetch('/api/push/vapidPublicKey');
       const { publicKey, error } = await res.json().catch(() => ({ publicKey: '', error: 'Resposta invalida do servidor' }));
       if (!res.ok) throw new Error(error || 'VAPID public key ausente no servidor.');
       if (!publicKey) throw new Error('VAPID public key ausente no servidor.');
 
-      // 2. Subscribe no Browser
-      const existingSubscription = await reg.pushManager.getSubscription();
-      const subscription = existingSubscription || await reg.pushManager.subscribe({
+      const storedPublicKey = localStorage.getItem(PUSH_VAPID_STORAGE_KEY);
+      let subscription = await reg.pushManager.getSubscription();
+      if (subscription && storedPublicKey && storedPublicKey !== publicKey) {
+        await subscription.unsubscribe().catch(() => false);
+        subscription = null;
+      }
+      subscription = subscription || await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
-      // 3. Salva no Banco de Dados via API
-      const companyId = localStorage.getItem('estateflow_company_id');
+      const companyId = localStorage.getItem('estateflow_company_id') || 'default';
       const saveRes = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subscription,
+          ...subscription.toJSON(),
           userId: userId || null,
-          companyId: companyId || 'default'
+          companyId,
+          company_id: companyId
         })
       });
       const saveData = await saveRes.json().catch(() => null);
-      if (!saveRes.ok) throw new Error(saveData.error || 'Falha ao salvar inscricao de push.');
+      if (!saveRes.ok) throw new Error(saveData?.error || 'Falha ao salvar inscricao de push.');
+
+      reg.active?.postMessage({
+        type: 'SHOW_NOTIFICATION',
+        title: 'EstateFlow Suite',
+        body: 'Notificacoes ativadas! Voce recebera alertas importantes por aqui.',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        url: '/'
+      });
+
       console.log('[Native Push] Dispositivo inscrito com sucesso.');
+      localStorage.setItem(PUSH_VAPID_STORAGE_KEY, publicKey);
     } catch (e) {
       console.error('[Native Push] Erro ao subscrever para push:', e);
       alert(e instanceof Error ? e.message : 'Erro ao ativar notificacoes push.');
     }
   }, [userId]);
 
-  // Solicita permissão e vincula
   const requestPermission = useCallback(async () => {
     if (!('Notification' in window)) {
-      alert('Este navegador no suporta notificaes push.');
+      alert('Este navegador nao suporta notificacoes push.');
       return;
     }
 
     const registration = swRegistrationRef.current || await navigator.serviceWorker.ready.catch(() => null);
     if (!registration) {
-      alert('Service Worker de notificaes ainda no est pronto. Recarregue a pgina e tente novamente.');
+      alert('Service Worker de notificacoes ainda nao esta pronto. Recarregue a pagina e tente novamente.');
       return;
     }
-    
+
     const result = await window.Notification.requestPermission();
     setPermissionStatus(result);
 
     if (result === 'granted') {
       await subscribeToPush(registration);
     } else {
-      alert('Permisso de notificaes negada. Voc no receber alertas push.');
+      alert('Permissao de notificacoes negada. Voce nao recebera alertas push.');
     }
   }, [subscribeToPush]);
 

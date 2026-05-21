@@ -1,5 +1,8 @@
 {
     "framework": "vite",
+    "crons": [
+        { "path": "/api/contract-alerts/run", "schedule": "0 12 * * *" }
+    ],
     "rewrites": [
         { "source": "/api/agency/(.*)", "destination": "/api/agency" },
         { "source": "/api/auth/login", "destination": "/api/master?route=auth-login" },
@@ -11,6 +14,7 @@
         { "source": "/api/contracts/templates", "destination": "/api/contracts?action=templates" },
         { "source": "/api/contracts/events", "destination": "/api/contracts?action=events" },
         { "source": "/api/contracts/send-signature", "destination": "/api/contracts?action=send-signature" },
+        { "source": "/api/contract-alerts/(.*)", "destination": "/api/contract-alerts" },
         { "source": "/api/inspections/images", "destination": "/api/inspections?action=images" },
         { "source": "/api/leads/(.*)", "destination": "/api/leads" },
         { "source": "/api/property-documents/generate", "destination": "/api/property-documents?action=generate" },

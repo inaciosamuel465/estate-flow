@@ -668,6 +668,13 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     };
 
+    const addMonthsToDate = (dateString: string, months: number) => {
+        const date = new Date(`${dateString}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return '';
+        date.setMonth(date.getMonth() + months);
+        return date.toISOString().slice(0, 10);
+    };
+
     const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     // Filter Logic
@@ -705,11 +712,14 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                 return;
             }
 
+            const contractType = templateToContractType(selectedTemplate);
+            const resolvedEndDate = formData.endDate || (contractType === 'rent' && formData.startDate ? addMonthsToDate(formData.startDate, 30) : '');
+
             // Mock contract for generation
             const mockContract: Partial<Contract> = {
                 propertyId: prop.id,
                 propertyTitle: prop.title,
-                type: templateToContractType(selectedTemplate),
+                type: contractType,
                 clientId: cli.id,
                 clientName: cli.name,
                 ownerId: own?.id || '',
@@ -718,8 +728,9 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
                 commissionRate: parseFloat(formData.commissionRate),
                 dueDay: parseInt(formData.dueDay),
                 startDate: formData.startDate,
-                endDate: formData.endDate,
+                endDate: resolvedEndDate,
                 templateType: selectedTemplate as any,
+                installmentsTotal: contractType === 'rent' ? 30 : undefined,
             };
 
             const body = generateDocumentBody(mockContract as Contract);
@@ -736,11 +747,13 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
         const templateNeedsOwner = !!dynamicTemplates[selectedTemplate]?.requiresOwner;
         if (!prop || !cli || (templateNeedsOwner && !own)) return;
 
+        const contractType = templateToContractType(selectedTemplate);
+        const resolvedEndDate = formData.endDate || (contractType === 'rent' && formData.startDate ? addMonthsToDate(formData.startDate, 30) : '');
         const contractData: Partial<Contract> = {
             propertyId: prop.id,
             propertyTitle: prop.title,
             propertyImage: prop.image,
-            type: templateToContractType(selectedTemplate),
+            type: contractType,
             clientId: cli.id,
             clientName: cli.name,
             clientPhone: cli.phone || '',
@@ -751,9 +764,10 @@ const ContractsPage: React.FC<ContractsPageProps> = ({ contracts, properties, us
             commissionRate: parseFloat(formData.commissionRate),
             dueDay: parseInt(formData.dueDay),
             startDate: formData.startDate,
-            endDate: formData.endDate,
+            endDate: resolvedEndDate,
             templateType: selectedTemplate as any,
-            customContent: currentText // Final edited content
+            customContent: currentText, // Final edited content
+            installmentsTotal: contractType === 'rent' ? 30 : undefined,
         };
 
         if (editingContract) {
@@ -1485,11 +1499,16 @@ Este é um email automático. Por favor não responda.`;
                                              </div>
                                              <div className="space-y-1">
                                                  <label className="text-xs font-bold text-slate-500 uppercase">Data de Início</label>
-                                                 <input type="date" required className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111318] h-11 px-3 text-sm focus:ring-primary" value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
+                                                 <input type="date" required className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111318] h-11 px-3 text-sm focus:ring-primary" value={formData.startDate} onChange={e => {
+                                                     const startDate = e.target.value;
+                                                     const isRent = templateToContractType(selectedTemplate) === 'rent';
+                                                     setFormData({ ...formData, startDate, endDate: formData.endDate || (isRent ? addMonthsToDate(startDate, 30) : '') });
+                                                 }} />
                                              </div>
                                              <div className="space-y-1">
                                                  <label className="text-xs font-bold text-slate-500 uppercase">Data de Fim</label>
                                                  <input type="date" className="w-full rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111318] h-11 px-3 text-sm focus:ring-primary" value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+                                                 {templateToContractType(selectedTemplate) === 'rent' && <p className="text-[11px] text-slate-400">Locações usam 30 meses por padrão quando a data final fica vazia.</p>}
                                              </div>
                                          </div>
                                      </>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const MASTER_TEST_EMAIL = 'smartlogic.sjl@gmail.com';
+
 interface CompanySub {
   id: string;
   name: string;
@@ -82,7 +84,7 @@ const MasterBilling: React.FC = () => {
     }
   };
 
-  const handleSendBillingEmail = async (companyId: string) => {
+  const handleSendBillingEmail = async (companyId: string, test = false) => {
     setSendingEmail(true);
     setEmailMsg('');
     try {
@@ -91,10 +93,10 @@ const MasterBilling: React.FC = () => {
       const res = await fetch('/api/master/send-billing-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ company_id: companyId }),
+        body: JSON.stringify({ company_id: companyId, ...(test ? { test_to: MASTER_TEST_EMAIL } : {}) }),
       });
       const data = await res.json();
-      setEmailMsg(data.success ? 'Email enviado com sucesso!' : 'Erro: ' + (data.error || ''));
+      setEmailMsg(data.success ? `Email enviado com sucesso${test ? ` para ${MASTER_TEST_EMAIL}` : ''}!` : 'Erro: ' + (data.error || ''));
     } catch (e: any) {
       setEmailMsg('Erro de conexão: ' + e.message);
     } finally {
@@ -219,6 +221,14 @@ const MasterBilling: React.FC = () => {
                       >
                         <span className="material-symbols-outlined text-sm">mail</span>
                         Enviar Cobrança
+                      </button>
+                      <button
+                        onClick={() => handleSendBillingEmail(c.id, true)}
+                        disabled={sendingEmail}
+                        className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-sm">outgoing_mail</span>
+                        Teste
                       </button>
                     </td>
                   </tr>

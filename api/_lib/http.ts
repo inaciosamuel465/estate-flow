@@ -13,7 +13,7 @@ export function fail(res: VercelResponse, status: number, error: string, details
 }
 
 export function getSql() {
-  const dbUrl = process.env.VITE_DATABASE_URL;
+  const dbUrl = process.env.VITE_DATABASE_URL || process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DB not configured');
   return neon(dbUrl);
 }

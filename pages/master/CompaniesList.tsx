@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
+const MASTER_TEST_EMAIL = 'smartlogic.sjl@gmail.com';
+
 interface AdminUser {
   id: string;
   name: string;
@@ -310,7 +312,7 @@ const CompaniesList: React.FC = () => {
     }
   };
 
-  const handleSendBillingEmail = async (companyId: string) => {
+  const handleSendBillingEmail = async (companyId: string, test = false) => {
     setSendingEmail(true);
     setEmailMsg('');
     try {
@@ -319,10 +321,10 @@ const CompaniesList: React.FC = () => {
       const res = await fetch('/api/master/send-billing-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ company_id: companyId }),
+        body: JSON.stringify({ company_id: companyId, ...(test ? { test_to: MASTER_TEST_EMAIL } : {}) }),
       });
       const data = await res.json();
-      setEmailMsg(data.success ? 'Email enviado com sucesso!' : 'Erro: ' + (data.error || ''));
+      setEmailMsg(data.success ? `Email enviado com sucesso${test ? ` para ${MASTER_TEST_EMAIL}` : ''}!` : 'Erro: ' + (data.error || ''));
     } catch (e: any) {
       setEmailMsg('Erro de conexão: ' + e.message);
     } finally {
@@ -692,6 +694,11 @@ const CompaniesList: React.FC = () => {
                 className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl transition-all flex items-center gap-2">
                 {sendingEmail ? <span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span className="material-symbols-outlined text-lg">mail</span>}
                 Enviar Cobrança
+              </button>
+              <button onClick={() => handleSendBillingEmail(editCompany.id, true)} disabled={sendingEmail}
+                className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-xl transition-all flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">outgoing_mail</span>
+                Testar em {MASTER_TEST_EMAIL}
               </button>
               <button onClick={() => setEditCompany(null)} className="text-slate-400 hover:text-white px-6 py-3 rounded-xl transition-all font-medium">Cancelar</button>
             </div>

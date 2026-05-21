@@ -1,10 +1,7 @@
-// ─────────────────────────────────────────────────────────────
-// EstateFlow Suite — Service Worker de Notificações (Web Push Nativo)
-// ─────────────────────────────────────────────────────────────
+// EstateFlow Suite - Service Worker de Notificacoes Web Push
 
-const SW_VERSION = '1.0.0';
+const SW_VERSION = '2.0.0';
 
-// Ao receber Push Real do Backend
 self.addEventListener('push', function(event) {
   let data = {};
   if (event.data) {
@@ -26,12 +23,9 @@ self.addEventListener('push', function(event) {
     data: { url: data.url || '/' }
   };
 
-  event.waitUntil(
-    self.registration.showNotification(title, options)
-  );
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Ao clicar na notificação
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -47,6 +41,21 @@ self.addEventListener('notificationclick', (event) => {
       return clients.openWindow(targetUrl);
     })
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body, icon, badge, tag, url } = event.data;
+    self.registration.showNotification(title || 'EstateFlow Suite', {
+      body: body || '',
+      icon: icon || '/icon-192.png',
+      badge: badge || '/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: tag || 'estateflow-notification',
+      renotify: true,
+      data: { url: url || '/' }
+    });
+  }
 });
 
 self.addEventListener('install', () => {

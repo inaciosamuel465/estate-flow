@@ -5,6 +5,8 @@ import { useCompany } from '../src/contexts/CompanyContext';
 import type { User } from '../src/types';
 import { OFFICIAL_CONTRACT_TEMPLATES } from '../src/contracts/templates';
 
+const DEFAULT_TEST_EMAIL = 'smartlogic.sjl@gmail.com';
+
 interface AdminSettingsProps {
     settings: Record<string, string>;
     onSettingsUpdated: (newSettings: Record<string, string>) => void;
@@ -15,10 +17,11 @@ interface AdminSettingsProps {
 const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdated, users, currentUser }) => {
     const { permissionStatus, requestPermission } = useNotifications();
     const { company, companySettings, refreshCompany } = useCompany();
-    const [testEmail, setTestEmail] = useState('');
+    const [testEmail, setTestEmail] = useState(DEFAULT_TEST_EMAIL);
     const [isTestingEmail, setIsTestingEmail] = useState(false);
     const [testPushMessage, setTestPushMessage] = useState('Este é um teste de notificação push do EstateFlow!');
     const [isTestingPush, setIsTestingPush] = useState(false);
+    const [pushStatus, setPushStatus] = useState('');
 
     const adminUsers = useMemo(() => (users || []).filter(u => u.role === 'admin'), [users]);
     const officialContractTemplates = useMemo(() => Object.values(OFFICIAL_CONTRACT_TEMPLATES), []);
@@ -30,6 +33,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         agencyCreci: settings.agencyCreci || '',
         agencyStampUrl: settings.agencyStampUrl || '',
         agencyStampName: settings.agencyStampName || '',
+        companyEmail: company?.email || '',
         contactEmail: settings.contactEmail || '',
         contactPhone: settings.contactPhone || '',
         address: settings.address || '',
@@ -81,7 +85,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 })
             });
             const data = await res.json().catch(() => null);
-            if (res.ok && data.success) alert('E-mail de teste enviado!');
+            if (res.ok && data.success) alert(`E-mail de teste enviado para ${testEmail}.`);
             else alert(data.error || 'Erro ao enviar e-mail. Verifique as configurações SMTP.');
         } catch (e) {
             alert('Erro de conexão ao enviar e-mail.');
@@ -111,12 +115,37 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 })
             });
             const data = await res.json().catch(() => null);
-            if (res.ok) alert(`Push disparado para ${data.count} dispositivos inscritos.`);
+            if (res.ok) {
+                const message = data?.message || `Push enviado para ${data?.sent ?? data?.count ?? 0} dispositivo(s).`;
+                const details = `Inscritos: ${data?.count ?? 0} | Enviados: ${data?.sent ?? 0} | Falhas: ${data?.failed ?? 0} | Removidos: ${data?.removed ?? 0}`;
+                setPushStatus(`${message} ${details}`);
+                alert(`${message}\n${details}`);
+            }
             else alert(data?.error || `Erro ao disparar push (${res.status}).`);
         } catch (e) {
             alert('Erro de conexão ao disparar push.');
         } finally {
             setIsTestingPush(false);
+        }
+    };
+
+    const handlePushDiagnostics = async () => {
+        try {
+            const companyId = localStorage.getItem('estateflow_company_id') || '';
+            const token = localStorage.getItem('ef_token') || '';
+            const res = await fetch(`/api/push/diagnostics?company_id=${encodeURIComponent(companyId)}`, {
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...(currentUser?.id ? { 'X-EstateFlow-User-Id': String(currentUser.id) } : {}),
+                },
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(data?.error || 'Falha no diagnostico de push.');
+            const message = `VAPID publica: ${data.configured?.vapidPublic ? 'ok' : 'ausente'} | VAPID privada: ${data.configured?.vapidPrivate ? 'ok' : 'ausente'} | Dispositivos: ${data.subscriptions ?? 0}`;
+            setPushStatus(message);
+            alert(message);
+        } catch (e) {
+            alert(e instanceof Error ? e.message : 'Erro ao consultar diagnostico de push.');
         }
     };
 
@@ -145,7 +174,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
             });
             const data = await res.json().catch(() => null);
             if (res.ok) {
-                alert('Anúncio enviado com sucesso para todos os inscritos!');
+                const details = `Enviados: ${data?.sent ?? 0} | Falhas: ${data?.failed ?? 0} | Removidos: ${data?.removed ?? 0}`;
+                alert(`${data?.message || 'Anúncio enviado.'}\n${details}`);
                 setBroadcastMessage({ title: '', body: '', url: '/' });
             } else {
                 alert(data.error || 'Erro ao enviar broadcast.');
@@ -179,9 +209,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
         setLocalSettings(prev => ({
             ...prev,
             ...restSettings,
+            companyEmail: company?.email || prev.companyEmail || '',
             contractTemplates: officialContractTemplates
         }));
-    }, [settings, officialContractTemplates]);
+    }, [settings, officialContractTemplates, company?.email]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -233,6 +264,14 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                         facebook = EXCLUDED.facebook,
                         hero_video_url = EXCLUDED.hero_video_url,
                         updated_at = NOW()
+                `;
+                await sql`
+                    UPDATE companies
+                    SET name = COALESCE(${localSettings.companyName || null}, name),
+                        email = ${localSettings.companyEmail || null},
+                        phone = ${localSettings.contactPhone || null},
+                        updated_at = NOW()
+                    WHERE id = ${companyId}
                 `;
                 // Refresh company context to reflect changes immediately
                 if (refreshCompany) refreshCompany();
@@ -448,6 +487,18 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                                                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
                                                 placeholder="J-00000"
                                             />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-bold text-slate-700">E-mail da Imobiliária</label>
+                                            <input 
+                                                type="email" 
+                                                name="companyEmail"
+                                                value={localSettings.companyEmail || ''}
+                                                onChange={handleChange}
+                                                className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none"
+                                                placeholder="alertas@imobiliaria.com"
+                                            />
+                                            <p className="text-xs text-slate-400">Recebe alertas de contratos, cobranças e comunicados da empresa.</p>
                                         </div>
                                         <div className="space-y-4">
                                             <label className="block text-sm font-bold text-slate-700">E-mail Comercial</label>
@@ -1000,8 +1051,8 @@ Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Có
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                             <input value={testEmail} onChange={e => setTestEmail(e.target.value)}
                                                 className="w-full sm:flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all"
-                                                placeholder="seu@email.com" />
-                                            <button onClick={handleTestEmail} disabled={isTestingEmail || !testEmail}
+                                                placeholder={DEFAULT_TEST_EMAIL} />
+                                            <button type="button" onClick={handleTestEmail} disabled={isTestingEmail || !testEmail}
                                                 className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2">
                                                 {isTestingEmail ? <span className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Testar'}
                                             </button>
@@ -1066,6 +1117,14 @@ Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Có
                                                     <span className="material-symbols-outlined text-sm">vibration</span>
                                                     Ativar no Navegador
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handlePushDiagnostics}
+                                                    className="w-full py-2.5 bg-white text-blue-700 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-50 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">monitor_heart</span>
+                                                    Diagnosticar Push
+                                                </button>
 
                                                 <div className="flex flex-col sm:flex-row gap-2">
                                                     <input 
@@ -1084,6 +1143,11 @@ Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Có
                                                         {isTestingPush ? '...' : 'Testar'}
                                                     </button>
                                                 </div>
+                                                {pushStatus && (
+                                                    <p className="text-[11px] leading-relaxed text-blue-800 bg-white/70 border border-blue-100 rounded-xl px-3 py-2">
+                                                        {pushStatus}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1107,7 +1171,7 @@ Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Có
                                                         value={testEmail}
                                                         onChange={(e) => setTestEmail(e.target.value)}
                                                         className="w-full sm:flex-1 px-4 py-3 rounded-xl border border-slate-200 bg-white focus:outline-none text-sm"
-                                                        placeholder="Seu e-mail de teste"
+                                                        placeholder={DEFAULT_TEST_EMAIL}
                                                     />
                                                     <button
                                                         type="button"

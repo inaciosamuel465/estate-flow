@@ -48,14 +48,25 @@ export default defineConfig(({ mode }) => {
                 auth TEXT NOT NULL,
                 user_id TEXT,
                 company_id TEXT NOT NULL DEFAULT 'default',
+                keys JSONB DEFAULT '{}',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
               )
             `;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT`;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default'`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS keys JSONB DEFAULT '{}'`;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
             await sql`CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions (endpoint)`;
+            await sql`CREATE INDEX IF NOT EXISTS push_subscriptions_company_idx ON push_subscriptions (company_id)`;
+          };
+
+          const parsePushKeys = (value: any) => {
+            if (!value) return {};
+            if (typeof value === 'string') {
+              try { return JSON.parse(value); } catch { return {}; }
+            }
+            return typeof value === 'object' ? value : {};
           };
 
           const parseDevToken = (auth: string | string[] | undefined) => {
@@ -90,56 +101,125 @@ export default defineConfig(({ mode }) => {
             if (req.url?.startsWith('/api/')) {
               // Simulação de Vercel Functions para desenvolvimento local
               res.setHeader('Content-Type', 'application/json');
-              
+
+              if (req.url?.startsWith('/api/contract-alerts/')) {
+                try {
+                  const mod = await import('./api/contract-alerts.ts');
+                  const url = new URL(req.url, 'http://localhost');
+                  const body = req.method === 'GET' ? {} : await readJsonBody(req);
+                  const vReq: any = {
+                    ...req,
+                    method: req.method,
+                    url: req.url,
+                    headers: req.headers,
+                    query: Object.fromEntries(url.searchParams.entries()),
+                    body,
+                  };
+                  const vRes: any = {
+                    status(code: number) { res.statusCode = code; return vRes; },
+                    setHeader(name: string, value: string) { res.setHeader(name, value); return vRes; },
+                    json(data: unknown) { res.end(JSON.stringify(data)); return vRes; },
+                    send(data: unknown) { res.end(typeof data === 'string' ? data : JSON.stringify(data)); return vRes; },
+                  };
+                  await mod.default(vReq, vRes);
+                } catch (e: any) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ success: false, error: e.message || 'Erro ao executar alertas de contratos' }));
+                }
+                return;
+              }
+
               if (req.url === '/api/push/vapidPublicKey') {
                 const publicKey = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
-                res.end(JSON.stringify({ publicKey }));
+                if (!publicKey) {
+                  res.statusCode = 503;
+                  res.end(JSON.stringify({ success: false, error: 'VAPID public key nao configurada.' }));
+                  return;
+                }
+                res.end(JSON.stringify({ success: true, publicKey }));
+                return;
+              }
+
+              if (req.url?.startsWith('/api/push/diagnostics')) {
+                try {
+                  const url = new URL(req.url, 'http://localhost');
+                  const sql = neon(env.VITE_DATABASE_URL || env.DATABASE_URL || '');
+                  await ensurePushSchema(sql);
+                  const companyId = url.searchParams.get('companyId') || url.searchParams.get('company_id') || '';
+                  const user = await resolvePushUser(req, sql, companyId);
+                  if (!user) { res.statusCode = 401; res.end(JSON.stringify({ success: false, error: 'Nao autorizado' })); return; }
+                  const rows = companyId
+                    ? await sql`SELECT COUNT(*)::int as count FROM push_subscriptions WHERE company_id = ${companyId}`
+                    : await sql`SELECT COUNT(*)::int as count FROM push_subscriptions`;
+                  res.end(JSON.stringify({
+                    success: true,
+                    configured: {
+                      database: true,
+                      vapidPublic: Boolean(env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY),
+                      vapidPrivate: Boolean(env.VAPID_PRIVATE_KEY),
+                    },
+                    companyId: companyId || null,
+                    subscriptions: Number(rows[0]?.count || 0),
+                  }));
+                } catch (e: any) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ success: false, error: e.message }));
+                }
                 return;
               }
 
               if (req.url === '/api/push/subscribe') {
                 try {
-                  const sql = neon(env.VITE_DATABASE_URL);
+                  const sql = neon(env.VITE_DATABASE_URL || env.DATABASE_URL || '');
                   await ensurePushSchema(sql);
                   const body = await readJsonBody(req);
-                  const { subscription, userId, companyId } = body;
-                  if (!subscription || !subscription.endpoint) {
-                    res.statusCode = 400; res.end(JSON.stringify({ error: 'Subscription missing' })); return;
+                  const subscription = body.subscription || body;
+                  const userId = body.userId || body.user_id || null;
+                  const companyId = body.companyId || body.company_id || 'default';
+                  const keys = parsePushKeys(subscription.keys);
+                  const p256dh = keys.p256dh || subscription.p256dh || '';
+                  const auth = keys.auth || subscription.auth || '';
+                  if (!subscription || !subscription.endpoint || !p256dh || !auth) {
+                    res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'Inscricao de push incompleta.' })); return;
                   }
                   await sql`
-                    INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id, company_id)
-                    VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${userId || null}, ${companyId || 'default'})
+                    INSERT INTO push_subscriptions (endpoint, p256dh, auth, keys, user_id, company_id)
+                    VALUES (${subscription.endpoint}, ${p256dh}, ${auth}, ${JSON.stringify({ p256dh, auth })}::jsonb, ${userId || null}, ${companyId || 'default'})
                     ON CONFLICT (endpoint) DO UPDATE SET
                       user_id = EXCLUDED.user_id,
                       company_id = EXCLUDED.company_id,
                       p256dh = EXCLUDED.p256dh,
                       auth = EXCLUDED.auth,
+                      keys = EXCLUDED.keys,
                       updated_at = NOW()
                   `;
-                  res.end(JSON.stringify({ success: true }));
+                  res.end(JSON.stringify({ success: true, message: 'Dispositivo inscrito com sucesso.' }));
                 } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }
 
-              if (req.url === '/api/push/send' || req.url === '/api/push/broadcast') {
+              if (req.url === '/api/push/send' || req.url === '/api/push/broadcast' || req.url?.startsWith('/api/push/test/')) {
                 try {
                   const isBroadcast = req.url === '/api/push/broadcast';
-                  const sql = neon(env.VITE_DATABASE_URL);
+                  const sql = neon(env.VITE_DATABASE_URL || env.DATABASE_URL || '');
                   await ensurePushSchema(sql);
-                  const body = await readJsonBody(req);
+                  let body = await readJsonBody(req);
+                  if (req.url?.includes('/test/welcome')) body = { ...body, title: 'Bem-vindo ao EstateFlow', body: 'Teste de push recebido com sucesso.', url: '/' };
+                  if (req.url?.includes('/test/alert')) body = { ...body, title: 'Alerta EstateFlow', body: 'Este e um alerta de teste.', url: '/' };
+                  if (req.url?.includes('/test/news')) body = { ...body, title: 'Novidade EstateFlow', body: 'Broadcast de teste enviado.', url: '/' };
                   const { title, body: pushBody, url, userId, companyId, company_id } = body;
                   const scopedCompanyId = String(companyId || company_id || '');
                   if (!scopedCompanyId) {
-                    res.statusCode = 400; res.end(JSON.stringify({ error: 'companyId obrigatorio' })); return;
+                    res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'companyId obrigatorio' })); return;
                   }
                   const user = await resolvePushUser(req, sql, scopedCompanyId);
                   if (!user) {
-                    res.statusCode = 401; res.end(JSON.stringify({ error: 'Sessao invalida. Entre novamente e tente disparar o push.' })); return;
+                    res.statusCode = 401; res.end(JSON.stringify({ success: false, error: 'Sessao invalida. Entre novamente e tente disparar o push.' })); return;
                   }
                   const vapidPublic = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
                   const vapidPrivate = env.VAPID_PRIVATE_KEY;
                   if (!vapidPublic || !vapidPrivate) {
-                    res.statusCode = 500; res.end(JSON.stringify({ error: 'Push not configured' })); return;
+                    res.statusCode = 503; res.end(JSON.stringify({ success: false, error: 'Push nao configurado. Configure VITE_VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY.' })); return;
                   }
                   const webpush = await import('web-push');
                   webpush.default.setVapidDetails('mailto:contato@estateflow.com.br', vapidPublic, vapidPrivate);
@@ -149,21 +229,37 @@ export default defineConfig(({ mode }) => {
                   } else {
                     subscriptions = await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`;
                   }
-                  const payload = JSON.stringify({ title, body: pushBody, url });
-                  const sendPromises = subscriptions.map(async (sub: any) => {
+                  const origin = (env.APP_URL || env.VITE_APP_URL || `http://localhost:${server.config.server.port || 5173}`).replace(/\/$/, '');
+                  const absoluteUrl = /^https?:\/\//i.test(String(url || '')) ? String(url) : `${origin}${String(url || '/').startsWith('/') ? String(url || '/') : `/${String(url || '/')}`}`;
+                  const payload = JSON.stringify({ title, body: pushBody, icon: '/icon-192.png', badge: '/icon-192.png', url: absoluteUrl });
+                  const result = { count: subscriptions.length, sent: 0, failed: 0, removed: 0, errors: [] as any[] };
+                  for (const sub of subscriptions) {
+                    const savedKeys = parsePushKeys(sub.keys);
                     try {
                       await webpush.default.sendNotification({
                         endpoint: sub.endpoint,
-                        keys: { p256dh: sub.p256dh, auth: sub.auth }
+                        keys: { p256dh: savedKeys.p256dh || sub.p256dh, auth: savedKeys.auth || sub.auth }
                       }, payload);
+                      result.sent += 1;
                     } catch (error: any) {
                       if (error.statusCode === 410 || error.statusCode === 404) {
                         await sql`DELETE FROM push_subscriptions WHERE endpoint = ${sub.endpoint}`;
+                        result.removed += 1;
+                      } else {
+                        result.failed += 1;
+                        if (result.errors.length < 3) {
+                          result.errors.push({ statusCode: error.statusCode, message: String(error.body || error.message || 'Falha ao enviar push').slice(0, 180) });
+                        }
                       }
                     }
-                  });
-                  await Promise.all(sendPromises);
-                  res.end(JSON.stringify({ success: true, count: subscriptions.length }));
+                  }
+                  res.end(JSON.stringify({
+                    success: true,
+                    ...result,
+                    message: result.count === 0
+                      ? 'Nenhum dispositivo inscrito para esta imobiliaria. Ative o push no celular e tente novamente.'
+                      : `Push enviado para ${result.sent} dispositivo(s).`
+                  }));
                 } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
                 return;
               }
@@ -628,7 +724,8 @@ export default defineConfig(({ mode }) => {
                   const planPrice = Number(s.plan_price) || 170;
                   const appUrl = env.VITE_APP_URL || '';
                   const plansUrl = c.slug ? `${appUrl.replace(/\/$/, '')}/${c.slug}/plans` : `${appUrl.replace(/\/$/, '')}/plans`;
-                  const recipient = admin?.email || c.email;
+                  const recipient = body.test_to || admin?.email || c.email;
+                  if (!recipient) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Empresa sem email cadastrado para recebimento.' })); return; }
                   const subject = `Cobrança EstateFlow - ${s.plan_name || 'Mensal'}`;
                   const text = `Olá ${admin?.name || c.name},\n\nSegue o resumo da sua assinatura:\n\nPlano: ${s.plan_name || 'Mensal'}\nValor: R$ ${planPrice.toFixed(2)}\nStatus: ${c.subscription_status === 'active' ? 'Ativo' : 'Pendente'}\n\nPara gerenciar sua assinatura, acesse: ${plansUrl}\n\nEstateFlow Suite — Gestão Imobiliária`;
                   const html = `

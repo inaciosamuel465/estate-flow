@@ -6,10 +6,19 @@ interface ListingsManagementProps {
     onSelectProperty: (id: number | string) => void;
     properties: Property[];
     onDelete: (id: number | string) => void;
-    onUpdate: (id: number | string, data: Partial<Property>) => void;
+    onUpdate: (id: number | string, data: Partial<Property>) => void | Promise<void>;
     onEditFull: (property: Property) => void;
     currentUser: User | null;
 }
+
+type PropertyStatus = 'active' | 'sold' | 'rented' | 'draft';
+
+const STATUS_OPTIONS: Array<{ value: PropertyStatus; label: string; icon: string; className: string }> = [
+    { value: 'active', label: 'Ativo', icon: 'check_circle', className: 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100' },
+    { value: 'rented', label: 'Alugado', icon: 'vpn_key', className: 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100' },
+    { value: 'sold', label: 'Vendido', icon: 'real_estate_agent', className: 'text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100' },
+    { value: 'draft', label: 'Rascunho', icon: 'edit_note', className: 'text-slate-700 bg-slate-50 border-slate-200 hover:bg-slate-100' },
+];
 
 const ListingsManagement: React.FC<ListingsManagementProps> = ({
     onNavigate,
@@ -23,6 +32,7 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'draft' | 'sold' | 'rented'>('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [pendingStatusIds, setPendingStatusIds] = useState<(number | string)[]>([]);
 
     const myListings = useMemo(() => {
         if (currentUser?.role === 'admin') return properties;
@@ -51,8 +61,13 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
         });
     };
 
-    const handleQuickStatusChange = (id: number | string, newStatus: 'active' | 'sold' | 'rented' | 'draft') => {
-        onUpdate(id, { status: newStatus });
+    const handleQuickStatusChange = async (id: number | string, newStatus: PropertyStatus) => {
+        setPendingStatusIds(prev => [...new Set([...prev, id])]);
+        try {
+            await Promise.resolve(onUpdate(id, { status: newStatus }));
+        } finally {
+            setPendingStatusIds(prev => prev.filter(item => item !== id));
+        }
     };
 
     const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
@@ -73,14 +88,14 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
         }
     };
 
-    const handleBulkAction = (action: 'delete' | 'active' | 'sold' | 'rented') => {
+    const handleBulkAction = (action: 'delete' | PropertyStatus) => {
         if (!confirm(`Aplicar ação para ${selectedIds.length} itens?`)) return;
 
         selectedIds.forEach(id => {
             if (action === 'delete') {
                 onDelete(id);
             } else {
-                onUpdate(id, { status: action });
+                handleQuickStatusChange(id, action);
             }
         });
         setSelectedIds([]);
@@ -104,6 +119,33 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
             case 'draft': return 'Rascunho';
             default: return 'Ativo';
         }
+    };
+
+    const StatusButtons = ({ item, compact = false }: { item: Property; compact?: boolean }) => {
+        const current = (item.status || 'active') as PropertyStatus;
+        const pending = pendingStatusIds.includes(item.id);
+        return (
+            <div className={`grid ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'} gap-1.5 w-full`}>
+                {STATUS_OPTIONS.map(option => {
+                    const active = current === option.value;
+                    return (
+                        <button
+                            key={option.value}
+                            type="button"
+                            disabled={pending || active}
+                            onClick={() => handleQuickStatusChange(item.id, option.value)}
+                            title={`Marcar como ${option.label}`}
+                            className={`h-9 px-2 rounded-lg border text-[11px] font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-70 ${active ? 'bg-slate-900 text-white border-slate-900' : option.className}`}
+                        >
+                            <span className={`material-symbols-outlined ${pending && active ? 'animate-spin' : ''} text-[15px]`}>
+                                {pending && active ? 'sync' : option.icon}
+                            </span>
+                            <span>{option.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        );
     };
 
     return (
@@ -158,7 +200,9 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
                                 <div className="flex items-center gap-2">
                                     <div className="h-6 w-px bg-white/20 mx-2"></div>
                                     <button onClick={() => handleBulkAction('active')} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-bold transition-colors">Ativar</button>
+                                    <button onClick={() => handleBulkAction('rented')} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-bold transition-colors">Alugar</button>
                                     <button onClick={() => handleBulkAction('sold')} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-bold transition-colors">Vender</button>
+                                    <button onClick={() => handleBulkAction('draft')} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-bold transition-colors">Rascunho</button>
                                     <button onClick={() => handleBulkAction('delete')} className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 text-rose-500 hover:text-white rounded text-xs font-bold transition-colors flex items-center gap-1">
                                         <span className="material-symbols-outlined text-[16px]">delete</span> Excluir
                                     </button>
@@ -240,19 +284,10 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
                                             <span className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">square_foot</span> {item.area}m²</span>
                                         </div>
 
-                                        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                                            <div className="flex gap-1 group/actions relative">
-                                                <button className="text-xs font-bold text-slate-500 hover:text-primary flex items-center gap-1">
-                                                    Status <span className="material-symbols-outlined text-[14px]">expand_more</span>
-                                                </button>
-                                                <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-[#1a1d23] border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl p-1 hidden group-hover/actions:flex flex-col gap-1 min-w-[100px] z-10">
-                                                    <button onClick={() => handleQuickStatusChange(item.id, 'active')} className="px-3 py-1.5 text-xs text-left hover:bg-emerald-50 text-emerald-600 rounded">Ativo</button>
-                                                    <button onClick={() => handleQuickStatusChange(item.id, 'sold')} className="px-3 py-1.5 text-xs text-left hover:bg-rose-50 text-rose-600 rounded">Vendido</button>
-                                                    <button onClick={() => handleQuickStatusChange(item.id, 'rented')} className="px-3 py-1.5 text-xs text-left hover:bg-blue-50 text-blue-600 rounded">Alugado</button>
-                                                </div>
-                                            </div>
+                                        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                                            <StatusButtons item={item} />
 
-                                            <div className="flex gap-1">
+                                            <div className="flex gap-1 justify-end">
                                                 <button onClick={() => handleShare(item.id)} className="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-primary transition-colors" title="Compartilhar Link">
                                                     <span className="material-symbols-outlined text-[18px]">share</span>
                                                 </button>
@@ -320,9 +355,9 @@ const ListingsManagement: React.FC<ListingsManagementProps> = ({
                                                 <span className="text-sm font-semibold text-slate-900 dark:text-white">{item.price}</span>
                                             </td>
                                             <td className="p-4">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${getStatusColor(item.status)}`}>
-                                                    {getStatusLabel(item.status)}
-                                                </span>
+                                                <div className="min-w-[210px]">
+                                                    <StatusButtons item={item} compact />
+                                                </div>
                                             </td>
                                             <td className="p-4 hidden md:table-cell">
                                                 <div className="flex flex-col gap-1 text-xs text-slate-500">

@@ -475,9 +475,11 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProperty = async (id: number | string, updatedData: Partial<Property>) => {
+    const previousProperties = properties;
     setProperties(prev => prev.map(p =>
       p.id === id ? { ...p, ...updatedData } : p
     ));
+    try {
     if (currentView === 'edit-listing') {
       setCurrentView('all-listings');
       setPropertyToEdit(null);
@@ -485,6 +487,12 @@ const App: React.FC = () => {
     await updateProperty(String(id), updatedData);
     const adminId = currentUser?.id ? String(currentUser?.id) : 'admin';
     await logActivity(adminId, currentUser?.name, 'update', 'property', String(id), `Imóvel ID ${id} atualizado`);
+    } catch (error) {
+      setProperties(previousProperties);
+      console.error('Erro ao atualizar imóvel:', error);
+      alert('Não foi possível atualizar o imóvel. A alteração foi desfeita.');
+      throw error;
+    }
   };
 
   const handleDeleteProperty = async (id: number | string) => {

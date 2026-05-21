@@ -97,7 +97,7 @@ function hashToken(token: string) {
 }
 
 function getBaseUrl(req: VercelRequest, explicit: string) {
-  const base = explicit || process.env.VITE_APP_URL || process.env.APP_URL || `https://${req.headers.host || 'localhost'}`;
+  const base = explicit || process.env.APP_URL || process.env.VITE_APP_URL || `https://${req.headers.host || 'localhost'}`;
   return String(base).replace(/\/+$/, '');
 }
 
@@ -383,7 +383,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const tenantSlug = String(tenant_slug || contract.tenant_slug || '').trim();
       const token = randomBytes(32).toString('base64url');
       const tokenHash = hashToken(token);
-      const signatureUrl = `${getBaseUrl(req, base_url)}/${tenantSlug}/contrato/${String(contract_id)}token=${encodeURIComponent(token)}`;
+      const signatureUrl = `${getBaseUrl(req, base_url)}/${tenantSlug}/contrato/${String(contract_id)}?token=${encodeURIComponent(token)}`;
       const uniqueSuffix = `${String(contract_id).slice(0, 8)}-${Date.now()}`;
       const subject = `Contrato #${uniqueSuffix} - Assinatura - ${contract.property_title || 'Imovel'}`;
       const logId = `elog_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -424,25 +424,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const escapedProperty = escapeHtml(contract.property_title || 'imovel');
       const escapedUrl = escapeHtml(signatureUrl);
       const html = `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#0f172a;line-height:1.5;">
-          <h1 style="font-size:20px;margin:0 0 12px;">Contrato para assinatura</h1>
-          <p>Olá, <strong>${escapedClient}</strong>.</p>
-          <p>A <strong>${escapedAgency}</strong> enviou o contrato do imóvel <strong>${escapedProperty}</strong> para leitura e assinatura digital.</p>
-          <p style="margin:28px 0;">
-            <a href="${escapedUrl}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:10px;font-weight:700;display:inline-block;">Abrir contrato</a>
-          </p>
-          <p style="font-size:13px;color:#475569;">Se o botão não abrir, copie e cole este link no navegador:</p>
-          <p style="font-size:12px;word-break:break-all;color:#2563eb;">${escapedUrl}</p>
-          <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
-          <p style="font-size:12px;color:#64748b;margin:0;">Mensagem automática da ${escapedAgency}. Cada contrato possui um link individual e seguro.</p>
-        </div>
+        <!DOCTYPE html>
+        <html>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+          <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;color:#0f172a;line-height:1.5;">
+            <div style="background:#0f172a;padding:28px;text-align:center;">
+              <h1 style="color:#ffffff;font-size:22px;margin:0;">EstateFlow Suite</h1>
+              <p style="color:#cbd5e1;font-size:13px;margin:8px 0 0;">Assinatura digital de contrato</p>
+            </div>
+            <div style="padding:28px;">
+              <h2 style="font-size:20px;margin:0 0 12px;">Contrato para assinatura</h2>
+              <p>Ola, <strong>${escapedClient}</strong>.</p>
+              <p>A <strong>${escapedAgency}</strong> enviou o contrato do imovel <strong>${escapedProperty}</strong> para leitura e assinatura digital.</p>
+              <p style="margin:28px 0;">
+                <a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;display:inline-block;">Abrir contrato no navegador</a>
+              </p>
+              <p style="font-size:13px;color:#475569;">Se o botao nao abrir, copie e cole este link no navegador:</p>
+              <p style="font-size:12px;word-break:break-all;color:#2563eb;">${escapedUrl}</p>
+              <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;" />
+              <p style="font-size:12px;color:#64748b;margin:0;">Mensagem automatica da ${escapedAgency}. Cada contrato possui um link individual e seguro.</p>
+            </div>
+          </div>
+        </body>
+        </html>
       `;
 
       const info = await transporter.sendMail({
         from: `"${senderName.replace(/"/g, '')}" <${senderEmail}>`,
         to: targetEmail,
         subject,
-        text: `Olá, ${contract.client_name || 'Cliente'}.\n\nA ${senderName} enviou o contrato do imóvel ${contract.property_title || ''} para assinatura digital.\n\nAbra o contrato neste link:\n${signatureUrl}\n\nMensagem automática.`,
+        text: `Ola, ${contract.client_name || 'Cliente'}.\n\nA ${senderName} enviou o contrato do imovel ${contract.property_title || ''} para assinatura digital.\n\nAbra o contrato no navegador por este link:\n${signatureUrl}\n\nMensagem automatica.`,
         html,
         messageId,
         headers: {
@@ -456,7 +468,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         VALUES (${logId}, ${companyId}, ${user?.id || null}, ${targetEmail}, ${subject}, 'sent', ${config.source === 'company' ? 'smtp' : 'smtp_env'}, ${info.messageId || messageId}, NULL, 'contract', ${String(contract_id)}, ${JSON.stringify({ signatureUrl })}::jsonb)
       `;
 
-      await auditLog(sql, { companyId, userId: user.id, action: 'contract_signature_sent', entityType: 'contract', entityId: String(contract_id) });
+      if (user) {
+        await auditLog(sql, { companyId, userId: user.id, action: 'contract_signature_sent', entityType: 'contract', entityId: String(contract_id) });
+      }
       return ok(res, { data: { log_id: logId, status: 'sent', url: signatureUrl } });
     }
 

@@ -158,7 +158,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
                     {/* Revenue Chart */}
                     <div className="bg-white dark:bg-[#1a1d23] p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Evolução Financeira</h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[300px] min-h-[300px] min-w-0 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={revenueData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <defs>
@@ -189,7 +189,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
                     {/* Funnel Chart (Composite) */}
                     <div className="bg-white dark:bg-[#1a1d23] p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Funil de Conversão</h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[300px] min-h-[300px] min-w-0 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={leadsFunnelData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                                     <XAxis type="number" stroke="#94a3b8" hide />
@@ -211,7 +211,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
                     {/* Type Distribution */}
                     <div className="bg-white dark:bg-[#1a1d23] p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Distribuição de Portfólio</h3>
-                        <div className="h-[300px] w-full flex items-center justify-center">
+                        <div className="h-[300px] min-h-[300px] min-w-0 w-full flex items-center justify-center">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -238,7 +238,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ properties = [], contracts = [] }
                     {/* Neighborhood Performance */}
                     <div className="bg-white dark:bg-[#1a1d23] p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Top Bairros (Valor m²)</h3>
-                        <div className="h-[300px] w-full">
+                        <div className="h-[300px] min-h-[300px] min-w-0 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={neighborhoodData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
