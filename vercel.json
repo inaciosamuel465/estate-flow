@@ -21,6 +21,7 @@
         { "source": "/api/property-documents/send-email", "destination": "/api/property-documents?action=send-email" },
         { "source": "/api/property-processes/:id/events", "destination": "/api/property-processes?id=:id&events=1" },
         { "source": "/api/property-processes/:id", "destination": "/api/property-processes?id=:id" },
+        { "source": "/api/broadcast/push", "destination": "/api/push" },
         { "source": "/api/push/(.*)", "destination": "/api/push" },
         { "source": "/api/subscriptions/(.*)", "destination": "/api/subscriptions" },
         { "source": "/api/master/(.*)", "destination": "/api/master" },

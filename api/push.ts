@@ -41,6 +41,10 @@ function isMasterRole(role?: string) {
   return role === 'master' || role === 'superadmin';
 }
 
+function isAdminRole(role?: string) {
+  return role === 'admin' || role === 'master' || role === 'superadmin';
+}
+
 function parseKeys(value: unknown): { p256dh?: string; auth?: string } {
   if (!value) return {};
   if (typeof value === 'string') {
@@ -69,18 +73,23 @@ function normalizeSubscription(input: any) {
 async function ensurePushSchema(sql: ReturnType<typeof neon>) {
   await sql`
     CREATE TABLE IF NOT EXISTS push_subscriptions (
-      endpoint TEXT PRIMARY KEY,
-      p256dh TEXT NOT NULL,
-      auth TEXT NOT NULL,
-      user_id TEXT,
-      company_id TEXT NOT NULL DEFAULT 'default',
+      id SERIAL PRIMARY KEY,
+      endpoint TEXT UNIQUE NOT NULL,
       keys JSONB DEFAULT '{}',
+      p256dh TEXT,
+      auth TEXT,
+      user_id TEXT,
+      company_id TEXT,
+      role TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS p256dh TEXT`;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS auth TEXT`;
   await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT`;
-  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default'`;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT`;
+  await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS role TEXT`;
   await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS keys JSONB DEFAULT '{}'`;
   await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions (endpoint)`;
@@ -96,7 +105,8 @@ async function resolvePushUser(req: VercelRequest, sql: ReturnType<typeof neon>,
   }
 
   const headerUserId = req.headers['x-estateflow-user-id'];
-  const userId = Array.isArray(headerUserId) ? headerUserId[0] : headerUserId;
+  const bodyUserId = (req as any).body?.userId || (req as any).body?.user_id;
+  const userId = (Array.isArray(headerUserId) ? headerUserId[0] : headerUserId) || bodyUserId;
   if (!userId || !companyId) return null;
 
   const rows = await sql`
@@ -114,6 +124,58 @@ async function resolvePushUser(req: VercelRequest, sql: ReturnType<typeof neon>,
     role: String(user.role),
     company_id: user.company_id ? String(user.company_id) : undefined,
   };
+}
+
+async function getAdminSubscriptions(sql: ReturnType<typeof neon>, companyId?: string, userId?: string) {
+  if (companyId && userId) {
+    return sql`
+      SELECT ps.*
+      FROM push_subscriptions ps
+      JOIN users u ON u.id::text = ps.user_id
+      WHERE ps.company_id = ${companyId}
+        AND u.company_id::text = ${companyId}
+        AND u.role = 'admin'
+        AND ps.user_id = ${String(userId)}
+    `;
+  }
+
+  if (companyId) {
+    return sql`
+      SELECT ps.*
+      FROM push_subscriptions ps
+      JOIN users u ON u.id::text = ps.user_id
+      WHERE ps.company_id = ${companyId}
+        AND u.company_id::text = ${companyId}
+        AND u.role = 'admin'
+    `;
+  }
+
+  return sql`
+    SELECT ps.*
+    FROM push_subscriptions ps
+    JOIN users u ON u.id::text = ps.user_id
+    WHERE u.role = 'admin'
+  `;
+}
+
+async function countAdminSubscriptions(sql: ReturnType<typeof neon>, companyId?: string) {
+  if (companyId) {
+    return sql`
+      SELECT COUNT(*)::int as count
+      FROM push_subscriptions ps
+      JOIN users u ON u.id::text = ps.user_id
+      WHERE ps.company_id = ${companyId}
+        AND u.company_id::text = ${companyId}
+        AND u.role = 'admin'
+    `;
+  }
+
+  return sql`
+    SELECT COUNT(*)::int as count
+    FROM push_subscriptions ps
+    JOIN users u ON u.id::text = ps.user_id
+    WHERE u.role = 'admin'
+  `;
 }
 
 function webPushSubscription(row: any) {
@@ -179,11 +241,14 @@ function pushPayload(req: VercelRequest, input: { title?: string; body?: string;
 }
 
 async function handleSend(req: VercelRequest, res: VercelResponse, sql: ReturnType<typeof neon>, broadcast: boolean) {
-  const { title, body, url, userId, companyId, company_id } = req.body || {};
+  const { title, body, message, url, userId, companyId, company_id } = req.body || {};
   const requestedCompanyId = String(companyId || company_id || req.query.companyId || req.query.company_id || '');
   const user = await resolvePushUser(req, sql, requestedCompanyId);
   if (!user) {
     return res.status(401).json({ success: false, error: 'Sessao invalida. Entre novamente e tente enviar o push.' });
+  }
+  if (!isAdminRole(user.role)) {
+    return res.status(403).json({ success: false, error: 'Push permitido apenas para administradores.' });
   }
 
   const scopedCompanyId = requestedCompanyId || user.company_id || '';
@@ -202,13 +267,7 @@ async function handleSend(req: VercelRequest, res: VercelResponse, sql: ReturnTy
 
   webpush.setVapidDetails('mailto:contato@estateflow.com.br', vapid.publicKey, vapid.privateKey);
 
-  const subscriptions = (!broadcast && userId
-    ? scopedCompanyId
-      ? await sql`SELECT * FROM push_subscriptions WHERE user_id = ${String(userId)} AND company_id = ${scopedCompanyId}`
-      : await sql`SELECT * FROM push_subscriptions WHERE user_id = ${String(userId)}`
-    : scopedCompanyId
-      ? await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`
-      : await sql`SELECT * FROM push_subscriptions`) as any[];
+  const subscriptions = await getAdminSubscriptions(sql, scopedCompanyId || undefined, !broadcast && userId ? String(userId) : undefined) as any[];
 
   if (subscriptions.length === 0) {
     return res.status(200).json({
@@ -217,11 +276,11 @@ async function handleSend(req: VercelRequest, res: VercelResponse, sql: ReturnTy
       sent: 0,
       failed: 0,
       removed: 0,
-      message: 'Nenhum dispositivo inscrito para esta imobiliaria. Ative o push no celular e tente novamente.',
+      message: 'Nenhum administrador inscrito para esta imobiliaria. Ative o push no celular usando uma conta admin e tente novamente.',
     });
   }
 
-  const result = await sendToSubscriptions(sql, subscriptions as any[], pushPayload(req, { title, body, url }));
+  const result = await sendToSubscriptions(sql, subscriptions as any[], pushPayload(req, { title, body: body || message, url }));
   return res.status(200).json({
     success: true,
     ...result,
@@ -237,7 +296,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dbUrl = getDbUrl();
     const vapid = getVapidConfig();
 
-    if (path === '/api/push/vapidPublicKey' && req.method === 'GET') {
+    if ((path === '/api/push/vapidPublicKey' || path === '/api/push/vapid-key') && req.method === 'GET') {
       if (!vapid.publicKey) {
         return res.status(503).json({ success: false, error: 'VAPID public key nao configurada.', code: 'missing_vapid_public' });
       }
@@ -255,10 +314,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const companyId = String(req.query.companyId || req.query.company_id || '');
       const user = await resolvePushUser(req, sql, companyId || undefined);
       if (!user) return res.status(401).json({ success: false, error: 'Nao autorizado' });
+      if (!isAdminRole(user.role)) return res.status(403).json({ success: false, error: 'Apenas administradores podem diagnosticar push.' });
       const scopedCompanyId = companyId || user.company_id || '';
-      const rows = scopedCompanyId
-        ? await sql`SELECT COUNT(*)::int as count FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`
-        : await sql`SELECT COUNT(*)::int as count FROM push_subscriptions`;
+      const rows = await countAdminSubscriptions(sql, scopedCompanyId || undefined);
       return res.status(200).json({
         success: true,
         configured: {
@@ -274,18 +332,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (path === '/api/push/subscribe' && req.method === 'POST') {
       const subscription = normalizeSubscription(req.body);
       const userId = req.body?.userId || req.body?.user_id || null;
-      const companyId = String(req.body?.companyId || req.body?.company_id || 'default');
+      const companyId = String(req.body?.companyId || req.body?.company_id || '').trim();
 
       if (!subscription.endpoint || !subscription.keys.p256dh || !subscription.keys.auth) {
         return res.status(400).json({ success: false, error: 'Inscricao de push incompleta.' });
       }
+      if (!companyId) {
+        return res.status(400).json({ success: false, error: 'Empresa nao identificada para salvar o push. Recarregue o painel da imobiliaria.' });
+      }
+
+      const user = await resolvePushUser(req, sql, companyId);
+      if (!user) {
+        return res.status(401).json({ success: false, error: 'Sessao invalida. Entre novamente e ative o push.' });
+      }
+      if (!isAdminRole(user.role)) {
+        return res.status(403).json({ success: false, error: 'Push permitido apenas para administradores.' });
+      }
 
       await sql`
-        INSERT INTO push_subscriptions (endpoint, p256dh, auth, keys, user_id, company_id)
-        VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${JSON.stringify(subscription.keys)}::jsonb, ${userId || null}, ${companyId})
+        INSERT INTO push_subscriptions (endpoint, p256dh, auth, keys, user_id, company_id, role)
+        VALUES (${subscription.endpoint}, ${subscription.keys.p256dh}, ${subscription.keys.auth}, ${JSON.stringify(subscription.keys)}::jsonb, ${String(user.id || userId)}, ${companyId}, ${user.role})
         ON CONFLICT (endpoint) DO UPDATE SET
           user_id = EXCLUDED.user_id,
           company_id = EXCLUDED.company_id,
+          role = EXCLUDED.role,
           p256dh = EXCLUDED.p256dh,
           auth = EXCLUDED.auth,
           keys = EXCLUDED.keys,
@@ -307,7 +377,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return handleSend(req, res, sql, false);
     }
 
-    if (path === '/api/push/broadcast' && req.method === 'POST') {
+    if ((path === '/api/push/broadcast' || path === '/api/broadcast/push') && req.method === 'POST') {
       return handleSend(req, res, sql, true);
     }
 

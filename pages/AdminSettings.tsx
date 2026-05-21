@@ -178,7 +178,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ settings, onSettingsUpdat
                 alert(`${data?.message || 'Anúncio enviado.'}\n${details}`);
                 setBroadcastMessage({ title: '', body: '', url: '/' });
             } else {
-                alert(data.error || 'Erro ao enviar broadcast.');
+                alert(data?.error || 'Erro ao enviar broadcast.');
             }
         } catch (e) {
             alert('Erro de rede ao enviar broadcast.');
@@ -918,7 +918,7 @@ Fica ressalvado que as relações contratuais regem-se subsidiariamente pelo Có
                                     </h2>
                                     
                                     <p className="text-slate-500 text-sm">
-                                        Envie uma notificação push em tempo real para <strong>todos os dispositivos</strong> que aceitaram receber notificações.
+                                        Envie uma notificação push em tempo real para <strong>os administradores</strong> que ativaram notificações nesta imobiliária.
                                         Use com moderação para anúncios de novos imóveis ou comunicados importantes.
                                     </p>
 

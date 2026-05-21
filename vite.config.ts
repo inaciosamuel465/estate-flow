@@ -43,22 +43,28 @@ export default defineConfig(({ mode }) => {
           const ensurePushSchema = async (sql: ReturnType<typeof neon>) => {
             await sql`
               CREATE TABLE IF NOT EXISTS push_subscriptions (
-                endpoint TEXT PRIMARY KEY,
-                p256dh TEXT NOT NULL,
-                auth TEXT NOT NULL,
-                user_id TEXT,
-                company_id TEXT NOT NULL DEFAULT 'default',
+                id SERIAL PRIMARY KEY,
+                endpoint TEXT UNIQUE NOT NULL,
                 keys JSONB DEFAULT '{}',
+                p256dh TEXT,
+                auth TEXT,
+                user_id TEXT,
+                company_id TEXT,
+                role TEXT,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
               )
             `;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS p256dh TEXT`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS auth TEXT`;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_id TEXT`;
-            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default'`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS company_id TEXT`;
+            await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS role TEXT`;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS keys JSONB DEFAULT '{}'`;
             await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`;
             await sql`CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions (endpoint)`;
             await sql`CREATE INDEX IF NOT EXISTS push_subscriptions_company_idx ON push_subscriptions (company_id)`;
+            await sql`CREATE INDEX IF NOT EXISTS push_subscriptions_user_company_idx ON push_subscriptions (user_id, company_id)`;
           };
 
           const parsePushKeys = (value: any) => {
@@ -80,11 +86,13 @@ export default defineConfig(({ mode }) => {
             }
           };
 
-          const resolvePushUser = async (req: any, sql: ReturnType<typeof neon>, companyId: string) => {
+          const isAdminRole = (role?: string) => ['admin', 'master', 'superadmin'].includes(String(role || ''));
+
+          const resolvePushUser = async (req: any, sql: ReturnType<typeof neon>, companyId: string, body?: any) => {
             const tokenPayload = parseDevToken(req.headers.authorization);
             if (tokenPayload?.exp && tokenPayload.exp >= Date.now()) return tokenPayload;
 
-            const userId = String(req.headers['x-estateflow-user-id'] || '');
+            const userId = String(req.headers['x-estateflow-user-id'] || body?.userId || body?.user_id || '');
             if (!userId || !companyId) return null;
             const rows = await sql`
               SELECT id, email, role, company_id
@@ -95,6 +103,39 @@ export default defineConfig(({ mode }) => {
             const user = rows[0];
             if (!user || !['admin', 'master', 'superadmin'].includes(String(user.role))) return null;
             return user;
+          };
+
+          const getAdminSubscriptions = async (sql: ReturnType<typeof neon>, companyId: string, userId?: string) => {
+            if (userId) {
+              return sql`
+                SELECT ps.*
+                FROM push_subscriptions ps
+                JOIN users u ON u.id::text = ps.user_id
+                WHERE ps.company_id = ${companyId}
+                  AND u.company_id::text = ${companyId}
+                  AND u.role = 'admin'
+                  AND ps.user_id = ${userId}
+              `;
+            }
+            return sql`
+              SELECT ps.*
+              FROM push_subscriptions ps
+              JOIN users u ON u.id::text = ps.user_id
+              WHERE ps.company_id = ${companyId}
+                AND u.company_id::text = ${companyId}
+                AND u.role = 'admin'
+            `;
+          };
+
+          const countAdminSubscriptions = async (sql: ReturnType<typeof neon>, companyId: string) => {
+            return sql`
+              SELECT COUNT(*)::int as count
+              FROM push_subscriptions ps
+              JOIN users u ON u.id::text = ps.user_id
+              WHERE ps.company_id = ${companyId}
+                AND u.company_id::text = ${companyId}
+                AND u.role = 'admin'
+            `;
           };
 
           server.middlewares.use(async (req, res, next) => {
@@ -129,7 +170,7 @@ export default defineConfig(({ mode }) => {
                 return;
               }
 
-              if (req.url === '/api/push/vapidPublicKey') {
+              if (req.url === '/api/push/vapidPublicKey' || req.url === '/api/push/vapid-key') {
                 const publicKey = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
                 if (!publicKey) {
                   res.statusCode = 503;
@@ -148,9 +189,9 @@ export default defineConfig(({ mode }) => {
                   const companyId = url.searchParams.get('companyId') || url.searchParams.get('company_id') || '';
                   const user = await resolvePushUser(req, sql, companyId);
                   if (!user) { res.statusCode = 401; res.end(JSON.stringify({ success: false, error: 'Nao autorizado' })); return; }
-                  const rows = companyId
-                    ? await sql`SELECT COUNT(*)::int as count FROM push_subscriptions WHERE company_id = ${companyId}`
-                    : await sql`SELECT COUNT(*)::int as count FROM push_subscriptions`;
+                  if (!isAdminRole(user.role)) { res.statusCode = 403; res.end(JSON.stringify({ success: false, error: 'Apenas administradores podem diagnosticar push.' })); return; }
+                  if (!companyId) { res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'companyId obrigatorio' })); return; }
+                  const rows = await countAdminSubscriptions(sql, companyId);
                   res.end(JSON.stringify({
                     success: true,
                     configured: {
@@ -175,46 +216,60 @@ export default defineConfig(({ mode }) => {
                   const body = await readJsonBody(req);
                   const subscription = body.subscription || body;
                   const userId = body.userId || body.user_id || null;
-                  const companyId = body.companyId || body.company_id || 'default';
+                  const companyId = String(body.companyId || body.company_id || '').trim();
                   const keys = parsePushKeys(subscription.keys);
                   const p256dh = keys.p256dh || subscription.p256dh || '';
                   const auth = keys.auth || subscription.auth || '';
                   if (!subscription || !subscription.endpoint || !p256dh || !auth) {
                     res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'Inscricao de push incompleta.' })); return;
                   }
+                  if (!companyId) {
+                    res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'Empresa nao identificada para salvar o push. Recarregue o painel da imobiliaria.' })); return;
+                  }
+                  const user = await resolvePushUser(req, sql, companyId, body);
+                  if (!user) {
+                    res.statusCode = 401; res.end(JSON.stringify({ success: false, error: 'Sessao invalida. Entre novamente e ative o push.' })); return;
+                  }
+                  if (!isAdminRole(user.role)) {
+                    res.statusCode = 403; res.end(JSON.stringify({ success: false, error: 'Push permitido apenas para administradores.' })); return;
+                  }
                   await sql`
-                    INSERT INTO push_subscriptions (endpoint, p256dh, auth, keys, user_id, company_id)
-                    VALUES (${subscription.endpoint}, ${p256dh}, ${auth}, ${JSON.stringify({ p256dh, auth })}::jsonb, ${userId || null}, ${companyId || 'default'})
+                    INSERT INTO push_subscriptions (endpoint, p256dh, auth, keys, user_id, company_id, role)
+                    VALUES (${subscription.endpoint}, ${p256dh}, ${auth}, ${JSON.stringify({ p256dh, auth })}::jsonb, ${String(user.id || userId)}, ${companyId}, ${String(user.role)})
                     ON CONFLICT (endpoint) DO UPDATE SET
                       user_id = EXCLUDED.user_id,
                       company_id = EXCLUDED.company_id,
+                      role = EXCLUDED.role,
                       p256dh = EXCLUDED.p256dh,
                       auth = EXCLUDED.auth,
                       keys = EXCLUDED.keys,
                       updated_at = NOW()
                   `;
                   res.end(JSON.stringify({ success: true, message: 'Dispositivo inscrito com sucesso.' }));
-                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ success: false, error: e.message })); }
                 return;
               }
 
-              if (req.url === '/api/push/send' || req.url === '/api/push/broadcast' || req.url?.startsWith('/api/push/test/')) {
+              if (req.url === '/api/push/send' || req.url === '/api/push/broadcast' || req.url === '/api/broadcast/push' || req.url?.startsWith('/api/push/test/')) {
                 try {
-                  const isBroadcast = req.url === '/api/push/broadcast';
+                  const isBroadcast = req.url === '/api/push/broadcast' || req.url === '/api/broadcast/push';
                   const sql = neon(env.VITE_DATABASE_URL || env.DATABASE_URL || '');
                   await ensurePushSchema(sql);
                   let body = await readJsonBody(req);
                   if (req.url?.includes('/test/welcome')) body = { ...body, title: 'Bem-vindo ao EstateFlow', body: 'Teste de push recebido com sucesso.', url: '/' };
                   if (req.url?.includes('/test/alert')) body = { ...body, title: 'Alerta EstateFlow', body: 'Este e um alerta de teste.', url: '/' };
                   if (req.url?.includes('/test/news')) body = { ...body, title: 'Novidade EstateFlow', body: 'Broadcast de teste enviado.', url: '/' };
-                  const { title, body: pushBody, url, userId, companyId, company_id } = body;
+                  const { title, body: pushBody, message, url, userId, companyId, company_id } = body;
                   const scopedCompanyId = String(companyId || company_id || '');
                   if (!scopedCompanyId) {
                     res.statusCode = 400; res.end(JSON.stringify({ success: false, error: 'companyId obrigatorio' })); return;
                   }
-                  const user = await resolvePushUser(req, sql, scopedCompanyId);
+                  const user = await resolvePushUser(req, sql, scopedCompanyId, body);
                   if (!user) {
                     res.statusCode = 401; res.end(JSON.stringify({ success: false, error: 'Sessao invalida. Entre novamente e tente disparar o push.' })); return;
+                  }
+                  if (!isAdminRole(user.role)) {
+                    res.statusCode = 403; res.end(JSON.stringify({ success: false, error: 'Push permitido apenas para administradores.' })); return;
                   }
                   const vapidPublic = env.VITE_VAPID_PUBLIC_KEY || env.VAPID_PUBLIC_KEY;
                   const vapidPrivate = env.VAPID_PRIVATE_KEY;
@@ -223,15 +278,10 @@ export default defineConfig(({ mode }) => {
                   }
                   const webpush = await import('web-push');
                   webpush.default.setVapidDetails('mailto:contato@estateflow.com.br', vapidPublic, vapidPrivate);
-                  let subscriptions;
-                  if (userId && !isBroadcast) {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE user_id = ${userId} AND company_id = ${scopedCompanyId}`;
-                  } else {
-                    subscriptions = await sql`SELECT * FROM push_subscriptions WHERE company_id = ${scopedCompanyId}`;
-                  }
+                  const subscriptions = (await getAdminSubscriptions(sql, scopedCompanyId, userId && !isBroadcast ? String(userId) : undefined)) as any[];
                   const origin = (env.APP_URL || env.VITE_APP_URL || `http://localhost:${server.config.server.port || 5173}`).replace(/\/$/, '');
                   const absoluteUrl = /^https?:\/\//i.test(String(url || '')) ? String(url) : `${origin}${String(url || '/').startsWith('/') ? String(url || '/') : `/${String(url || '/')}`}`;
-                  const payload = JSON.stringify({ title, body: pushBody, icon: '/icon-192.png', badge: '/icon-192.png', url: absoluteUrl });
+                  const payload = JSON.stringify({ title, body: pushBody || message, icon: '/icon-192.png', badge: '/icon-192.png', url: absoluteUrl });
                   const result = { count: subscriptions.length, sent: 0, failed: 0, removed: 0, errors: [] as any[] };
                   for (const sub of subscriptions) {
                     const savedKeys = parsePushKeys(sub.keys);
@@ -257,10 +307,10 @@ export default defineConfig(({ mode }) => {
                     success: true,
                     ...result,
                     message: result.count === 0
-                      ? 'Nenhum dispositivo inscrito para esta imobiliaria. Ative o push no celular e tente novamente.'
+                      ? 'Nenhum administrador inscrito para esta imobiliaria. Ative o push no celular usando uma conta admin e tente novamente.'
                       : `Push enviado para ${result.sent} dispositivo(s).`
                   }));
-                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ success: false, error: e.message })); }
                 return;
               }
 
@@ -531,7 +581,7 @@ export default defineConfig(({ mode }) => {
                     user: safeUser,
                     token: Buffer.from(JSON.stringify(payload)).toString('base64url')
                   }));
-                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+                } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ success: false, error: e.message })); }
                 return;
               }
 

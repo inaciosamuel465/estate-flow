@@ -80,7 +80,7 @@ export const NotificationProvider: React.FC<Props> = ({
 
       const storedPublicKey = localStorage.getItem(PUSH_VAPID_STORAGE_KEY);
       let subscription = await reg.pushManager.getSubscription();
-      if (subscription && storedPublicKey && storedPublicKey !== publicKey) {
+      if (subscription && (!storedPublicKey || storedPublicKey !== publicKey)) {
         await subscription.unsubscribe().catch(() => false);
         subscription = null;
       }
@@ -89,10 +89,18 @@ export const NotificationProvider: React.FC<Props> = ({
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
-      const companyId = localStorage.getItem('estateflow_company_id') || 'default';
+      const companyId = localStorage.getItem('estateflow_company_id') || '';
+      if (!companyId) {
+        throw new Error('Empresa nao identificada. Recarregue o painel da imobiliaria antes de ativar o push.');
+      }
+      const token = localStorage.getItem('ef_token') || '';
       const saveRes = await fetch('/api/push/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(userId ? { 'X-EstateFlow-User-Id': String(userId) } : {}),
+        },
         body: JSON.stringify({
           ...subscription.toJSON(),
           userId: userId || null,
